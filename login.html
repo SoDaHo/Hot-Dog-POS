@@ -7,93 +7,239 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Login – Kasse</title>
     <style>
-        *{box-sizing:border-box}
-        body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f6f8fa}
-        header{padding:14px 16px;background:#111;color:#fff}
-        .wrap{max-width:720px;margin:0 auto;padding:16px}
-        .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-top:16px}
-        .user-btn{background:#fff;border:1px solid #ddd;border-radius:14px;padding:16px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-        .user-btn:active{transform:scale(.98)}
-        .card{background:#fff;border-radius:16px;box-shadow:0 2px 10px rgba(0,0,0,.08);padding:16px;margin-top:16px}
-        .pin-dots{display:flex;gap:10px;justify-content:center;margin:10px 0}
-        .pin-dots span{width:12px;height:12px;border-radius:999px;background:#ddd;display:inline-block}
-        .pin-dots span.on{background:#111}
-        .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-        .keypad button{padding:16px;border:none;border-radius:12px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.06);font-size:18px;cursor:pointer}
-        .keypad button:active{transform:scale(.98)}
-        .muted{color:#666;font-size:12px}
-        .sel{font-weight:700}
-        .row{display:flex;gap:10px;align-items:center;justify-content:center}
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            font-family: system-ui, Arial, sans-serif;
+            margin: 0;
+            background: #f6f8fa
+        }
+
+        header {
+            padding: 14px 16px;
+            background: #111;
+            color: #fff
+        }
+
+        .wrap {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 16px
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 12px;
+            margin-top: 16px
+        }
+
+        .user-btn {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 14px;
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .06)
+        }
+
+        .user-btn:active {
+            transform: scale(.98)
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .08);
+            padding: 16px;
+            margin-top: 16px
+        }
+
+        .pin-dots {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 10px 0
+        }
+
+        .pin-dots span {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            background: #ddd;
+            display: inline-block
+        }
+
+        .pin-dots span.on {
+            background: #111
+        }
+
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px
+        }
+
+        .keypad button {
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .06);
+            font-size: 18px;
+            cursor: pointer
+        }
+
+        .keypad button:active {
+            transform: scale(.98)
+        }
+
+        .muted {
+            color: #666;
+            font-size: 12px
+        }
+
+        .sel {
+            font-weight: 700
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center
+        }
     </style>
 </head>
 <body>
 <header>Login</header>
 <div class="wrap">
     <div class="card">
-        <div class="row" style="margin-bottom:8px"><div>Benutzer wählen:</div><div id="selUser" class="sel"></div></div>
+        <div class="row" style="margin-bottom:8px">
+            <div>Benutzer wählen:</div>
+            <div id="selUser" class="sel"></div>
+        </div>
         <div id="userGrid" class="grid"></div>
         <div id="pinCard" class="card" style="display:none">
             <div style="text-align:center">PIN eingeben für <span id="pinUser" class="sel"></span></div>
             <div class="pin-dots" id="pinDots"></div>
             <div class="keypad">
-                <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
-                <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
-                <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
-                <button data-k="b">⌫</button><button data-k="0">0</button><button data-k="," >,</button>
+                <button data-k="1">1</button>
+                <button data-k="2">2</button>
+                <button data-k="3">3</button>
+                <button data-k="4">4</button>
+                <button data-k="5">5</button>
+                <button data-k="6">6</button>
+                <button data-k="7">7</button>
+                <button data-k="8">8</button>
+                <button data-k="9">9</button>
+                <button data-k="b">⌫</button>
+                <button data-k="0">0</button>
+                <button data-k=",">,</button>
             </div>
-            <div class="row" style="margin-top:10px"><button id="ok" style="padding:10px 14px;border:none;border-radius:10px;background:#111;color:#fff">OK</button></div>
+            <div class="row" style="margin-top:10px">
+                <button id="ok" style="padding:10px 14px;border:none;border-radius:10px;background:#111;color:#fff">OK</button>
+            </div>
             <div id="msg" class="muted" style="text-align:center;margin-top:8px"></div>
         </div>
     </div>
 </div>
 <script>
-    let users=[], selectedUser=null, pin="";
+    let users = [], selectedUser = null, pin = "";
 
-    function setDots(n){
-        const dots=document.getElementById('pinDots');
-        dots.innerHTML='';
-        for(let i=0;i<6;i++){ const s=document.createElement('span'); if(i<n) s.classList.add('on'); dots.appendChild(s); }
+    function setDots(n) {
+        const dots = document.getElementById('pinDots');
+        dots.innerHTML = '';
+        for (let i = 0; i < 6; i++) {
+            const s = document.createElement('span');
+            if (i < n) s.classList.add('on');
+            dots.appendChild(s);
+        }
     }
 
-    function showKeypadFor(user){
-        selectedUser=user; pin=""; setDots(0);
-        document.getElementById('pinUser').textContent=user.username;
-        document.getElementById('selUser').textContent=user.username;
-        document.getElementById('pinCard').style.display='block';
-        document.getElementById('msg').textContent='';
+    function showKeypadFor(user) {
+        selectedUser = user;
+        pin = "";
+        setDots(0);
+        document.getElementById('pinUser').textContent = user.username;
+        document.getElementById('selUser').textContent = user.username;
+        document.getElementById('pinCard').style.display = 'block';
+        document.getElementById('msg').textContent = '';
     }
 
-    function renderUsers(){
-        const g=document.getElementById('userGrid'); g.innerHTML='';
-        users.filter(u=>u.active).forEach(u=>{
-            const b=document.createElement('button'); b.className='user-btn'; b.textContent=u.username + (u.is_admin? ' • Admin':'');
-            b.onclick=()=>showKeypadFor(u); g.appendChild(b);
+    function renderUsers() {
+        const g = document.getElementById('userGrid');
+        g.innerHTML = '';
+        users.filter(u => u.active).forEach(u => {
+            const b = document.createElement('button');
+            b.className = 'user-btn';
+            b.textContent = u.username;
+            b.onclick = () => showKeypadFor(u);
+            g.appendChild(b);
         });
     }
 
-    async function loadUsers(){
-        const r=await fetch('/api/users');
-        const d=await r.json();
-        users=(d.users||[]).map(u=>({id:u.id, username:u.username, active:u.active, is_admin:u.is_admin}));
+    async function loadUsers() {
+        const r = await fetch('/api/users');
+        const d = await r.json();
+        users = (d.users || []).map(u => ({
+            id: u.id,
+            username: u.username,
+            active: u.active,
+            is_admin: u.is_admin
+        }));
         renderUsers();
     }
 
-    function onKey(k){
-        if(k==='c' || k===','){ pin=''; setDots(0); return; }
-        if(k==='b'){ pin=pin.slice(0,-1); setDots(pin.length); return; }
-        if(/^[0-9]$/.test(k)){ if(pin.length<6){ pin+=k; setDots(pin.length);} }
+    function onKey(k) {
+        if (k === 'c') {
+            pin = '';
+            setDots(0);
+            return;
+        }
+        if (k === 'b') {
+            pin = pin.slice(0, -1);
+            setDots(pin.length);
+            return;
+        }
+        if (/^[0-9]$/.test(k)) {
+            if (pin.length < 6) {
+                pin += k;
+                setDots(pin.length);
+            }
+        }
     }
 
-    async function doLogin(){
-        if(!selectedUser){ document.getElementById('msg').textContent='Bitte Benutzer wählen'; return; }
-        const r=await fetch('/api/login',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:selectedUser.username, pin})});
-        const d=await r.json();
-        if(d.ok){ window.location='/'; } else { document.getElementById('msg').textContent=d.msg||'Fehler'; setDots(0); pin=''; }
+    async function doLogin() {
+        if (!selectedUser) {
+            document.getElementById('msg').textContent = 'Bitte Benutzer wählen';
+            return;
+        }
+        const r = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: selectedUser.username, pin })
+        });
+        const d = await r.json();
+        if (d.ok) {
+            window.location = '/';
+        } else {
+            document.getElementById('msg').textContent = d.msg || 'Fehler';
+            setDots(0);
+            pin = '';
+        }
     }
 
-    document.getElementById('ok').onclick=doLogin;
-    document.addEventListener('click', (ev)=>{ const b=ev.target.closest('.keypad button'); if(b){ onKey(b.dataset.k); }});
-
+    document.getElementById('ok').onclick = doLogin;
+    document.addEventListener('click', (ev) => {
+        const b = ev.target.closest('.keypad button');
+        if (b) {
+            onKey(b.dataset.k);
+        }
+    });
     loadUsers();
 </script>
 </body>

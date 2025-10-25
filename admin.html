@@ -2,270 +2,209 @@
 <html lang="de">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <title>Admin – Kasse</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin – Hot-Dog Kasse</title>
     <style>
-        :root{ --bg:#f6f8fa; --panel:#fff; --ink:#111; --muted:#6b7280; }
-        *{ box-sizing:border-box }
-        body{ margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--ink) }
-        header{ background:#111; color:#fff; padding:12px 16px; display:flex; align-items:center; gap:8px }
-        header .right{ margin-left:auto; display:flex; gap:8px }
-        header a{ color:#fff; text-decoration:none; background:#2a2a2a; padding:6px 10px; border-radius:10px }
-        .wrap{ max-width:1100px; margin:0 auto; padding:16px }
-
-        .tabs{ display:flex; gap:8px; flex-wrap:wrap }
-        .tab-btn{ border:2px solid #ddd; background:#fff; border-radius:12px; padding:10px 14px; cursor:pointer }
-        .tab-btn.active{ border-color:#111 }
-        .tab{ display:none; margin-top:14px }
-        .tab.active{ display:block }
-
-        .card{ background:var(--panel); border-radius:16px; padding:14px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
-        h2{ margin:0 0 10px; font-size:18px }
-        .muted{ color:var(--muted) }
-
-        .grid3{ display:grid; grid-template-columns:repeat(3, 1fr); gap:12px }
-        @media (max-width: 800px){ .grid3{ grid-template-columns:repeat(2, 1fr) } }
-        @media (max-width: 520px){ .grid3{ grid-template-columns:1fr } }
-
-        .kpi{ background:#fff; border:2px solid #eee; border-radius:14px; padding:12px }
-        .kpi .label{ font-size:12px; color:var(--muted) }
-        .kpi .value{ font-size:24px; font-weight:800 }
-
-        table{ width:100%; border-collapse:separate; border-spacing:0; }
-        th, td{ text-align:left; padding:10px 12px; border-bottom:1px solid #eee; vertical-align:top }
-        th{ font-size:12px; color:var(--muted); font-weight:600 }
-
-        .list{ display:grid; gap:10px }
-        .line{ display:flex; gap:8px; align-items:center; justify-content:space-between; background:#fff; border:1px solid #eee; border-radius:12px; padding:10px }
-        .grow{ flex:1 }
-        .btn{ border:none; border-radius:10px; padding:8px 12px; background:#111; color:#fff; cursor:pointer }
-        .btn.secondary{ background:#666 }
-        .btn.danger{ background:#b00020 }
-
-        .order{ border:1px solid #eee; border-radius:14px; padding:10px; background:#fff }
-        .order-head{ display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:6px }
-        .order-items{ display:flex; flex-wrap:wrap; gap:6px }
-        .order-item{ background:#f6f6f6; border-radius:10px; padding:6px 8px; font-size:13px }
+        :root{--bg:#f6f8fa;--card:#fff;--muted:#666;--ink:#111;--shadow:0 2px 10px rgba(0,0,0,.08)}
+        *{box-sizing:border-box}
+        body{font-family:system-ui,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+        header{padding:14px 16px;background:#111;color:#fff;display:flex;align-items:center;gap:12px}
+        header a{color:#fff;text-decoration:none;background:rgba(255,255,255,.12);padding:8px 10px;border-radius:10px}
+        .wrap{max-width:1100px;margin:0 auto;padding:16px}
+        .tabs{display:flex;gap:8px;flex-wrap:wrap}
+        .tab-btn{border:none;background:var(--card);box-shadow:var(--shadow);padding:10px 14px;border-radius:12px;cursor:pointer}
+        .tab-btn.active{background:#111;color:#fff}
+        .card{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px;margin-top:14px}
+        table{border-collapse:collapse;width:100%}
+        th,td{border-bottom:1px solid #eee;padding:10px;text-align:left}
+        th{background:#fafafa;font-weight:600}
+        input[type="text"],input[type="number"],input[type="password"]{border:1px solid #ddd;border-radius:10px;padding:8px 10px}
+        .btn{border:none;border-radius:10px;padding:8px 12px;background:#111;color:#fff;cursor:pointer}
+        .btn-outline{background:#fff;color:#111;border:1px solid #ddd}
+        .muted{color:var(--muted)}
+        .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#eee}
+        .right{margin-left:auto}
     </style>
 </head>
 <body>
 <header>
-    <div>Admin – Kasse</div>
-    <div class="right">
-        <a href="/">Zur Kasse</a>
-        <a href="/logout">Logout</a>
-    </div>
+    <a href="/">← Zur Kasse</a>
+    <strong>Admin</strong>
 </header>
-
 <div class="wrap">
     <div class="tabs">
-        <button class="tab-btn active" data-tab="overview">Übersicht (Heute)</button>
+        <button class="tab-btn active" data-tab="sales">Übersicht</button>
         <button class="tab-btn" data-tab="items">Artikel</button>
         <button class="tab-btn" data-tab="users">Benutzer</button>
         <button class="tab-btn" data-tab="payments">Zahlarten</button>
     </div>
 
-    <section id="overview" class="tab active">
-        <div class="grid3">
-            <div class="kpi"><div class="label">Umsatz heute</div><div class="value" id="kpi_amount">–</div></div>
-            <div class="kpi"><div class="label">Verkäufe heute</div><div class="value" id="kpi_orders">–</div></div>
-            <div class="kpi"><div class="label">Positionen heute</div><div class="value" id="kpi_lines">–</div></div>
+    <!-- Übersicht / Sales Tab -->
+    <section id="tab-sales" class="card">
+        <div style="display:flex; gap:12px; align-items:center">
+            <h3 style="margin:0">Tagesübersicht</h3>
+            <span id="summary-date" class="badge"></span>
+            <button class="btn-outline right" onclick="exportCSV()">CSV Export</button>
         </div>
-
-        <div class="card" style="margin-top:12px">
-            <h2>Verkaufte Mengen pro Artikel (heute)</h2>
-            <table id="today_items">
-                <thead><tr><th>Artikel</th><th>Menge</th><th class="muted">Umsatz</th></tr></thead>
+        <div style="overflow:auto;margin-top:10px">
+            <table id="sales-table">
+                <thead><tr><th>Zeit</th><th>Artikel</th><th>Menge</th><th>Preis</th><th>Gesamt</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
-
-        <div class="card" style="margin-top:12px">
-            <h2>Letzte Bestellungen (20)</h2>
-            <div id="recent_orders" class="list"></div>
+        <div style="display:flex; gap:12px; align-items:center; margin-top:10px">
+            <div class="badge">Summe: <span id="sum-total">0.00</span> <span id="sum-currency">CHF</span></div>
+            <div class="badge">Transaktionen: <span id="sum-count">0</span></div>
+        </div>
+        <h4 style="margin-top:18px">Verkaufte Mengen pro Artikel (heute)</h4>
+        <div style="overflow:auto">
+            <table id="per-item">
+                <thead><tr><th>Artikel</th><th>Menge</th><th>Summe</th></tr></thead>
+                <tbody></tbody>
+            </table>
         </div>
     </section>
 
-    <section id="items" class="tab">
-        <div class="card">
-            <h2>Artikel</h2>
-            <div class="line" style="margin-bottom:8px">
-                <input id="item_name" type="text" placeholder="Name" />
-                <input id="item_price" type="number" step="0.05" min="0" placeholder="Preis" />
-                <button id="item_add" class="btn">Hinzufügen</button>
-            </div>
-            <div id="items_list" class="list"></div>
+    <!-- Items Tab -->
+    <section id="tab-items" class="card" style="display:none">
+        <div style="display:flex;gap:10px;align-items:center">
+            <h3 style="margin:0">Artikel verwalten</h3>
+            <span class="muted">(in DB gespeichert)</span>
+            <button class="btn right" onclick="addItemRow()">Neuen Artikel</button>
+        </div>
+        <div style="overflow:auto;margin-top:10px">
+            <table id="items-table"><thead><tr><th>Sort</th><th>Name</th><th>Preis</th><th>Aktiv</th><th>Aktion</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:10px;align-items:center">
+            <button class="btn" onclick="saveAllItems()">Änderungen speichern</button>
+            <span class="muted" id="items-status"></span>
         </div>
     </section>
 
-    <section id="users" class="tab">
-        <div class="card">
-            <h2>Benutzer</h2>
-            <div class="line" style="margin-bottom:8px">
-                <input id="user_name" type="text" placeholder="Benutzername" />
-                <input id="user_pin" type="text" placeholder="PIN" />
-                <label><input type="checkbox" id="user_admin" /> Admin</label>
-                <button id="user_add" class="btn">Hinzufügen</button>
-            </div>
-            <div id="users_list" class="list"></div>
+    <!-- Users Tab -->
+    <section id="tab-users" class="card" style="display:none">
+        <div style="display:flex;gap:10px;align-items:center">
+            <h3 style="margin:0">Benutzer</h3>
+            <button class="btn right" onclick="addUserRow()">Neuer Benutzer</button>
+        </div>
+        <div style="overflow:auto;margin-top:10px">
+            <table id="users-table"><thead><tr><th>Username</th><th>PIN (neu/ändern)</th><th>Admin</th><th>Aktiv</th><th>Aktion</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:10px;align-items:center">
+            <button class="btn" onclick="saveAllUsers()">Änderungen speichern</button>
+            <span class="muted" id="users-status"></span>
         </div>
     </section>
 
-    <section id="payments" class="tab">
-        <div class="card">
-            <h2>Zahlarten</h2>
-            <div class="line" style="margin-bottom:8px">
-                <input id="pm_name" type="text" placeholder="Name (z.B. Twint)" />
-                <label><input type="checkbox" id="pm_prot" /> Geschützt</label>
-                <button id="pm_add" class="btn">Hinzufügen</button>
-            </div>
-            <div id="pm_list" class="list"></div>
+    <!-- Payments Tab -->
+    <section id="tab-payments" class="card" style="display:none">
+        <div style="display:flex;gap:10px;align-items:center">
+            <h3 style="margin:0">Zahlarten</h3>
+            <button class="btn right" onclick="addPMRow()">Neue Zahlart</button>
+        </div>
+        <div style="overflow:auto;margin-top:10px">
+            <table id="pm-table"><thead><tr><th>Sort</th><th>Name</th><th>Aktiv</th><th>Geschützt</th><th>Aktion</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:10px;align-items:center">
+            <button class="btn" onclick="saveAllPM()">Änderungen speichern</button>
+            <span class="muted" id="pm-status"></span>
         </div>
     </section>
 </div>
 
 <script>
     // Tabs
-    document.querySelectorAll('.tab-btn').forEach(b=>{
-        b.onclick=()=>{
-            document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
-            b.classList.add('active');
-            const id=b.dataset.tab; document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.id===id));
-        };
+    document.querySelectorAll('.tab-btn').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+            document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+            btn.classList.add('active');
+            const tab = btn.dataset.tab;
+            ['sales','items','users','payments'].forEach(t=>{
+                document.getElementById('tab-'+t).style.display = (t===tab)?'block':'none';
+            });
+        });
     });
 
-    const CURRENCY = 'CHF';
-    const fmt = (n)=> (Number(n)||0).toFixed(2) + ' ' + CURRENCY;
-    const el = (tag, attrs, html)=>{ const e=document.createElement(tag); if(attrs) Object.assign(e, attrs); if(html!=null) e.innerHTML=html; return e; };
+    function exportCSV(){ window.location='/export.csv'; }
 
-    // Übersicht (heute)
-    async function loadToday(){
-        const r = await fetch('/api/admin/today');
+    // ---- Load Sales ----
+    async function loadSales(){
+        const r = await fetch('/api/admin/summary');
         const data = await r.json();
-        document.getElementById('kpi_amount').textContent = fmt(data.amount);
-        document.getElementById('kpi_orders').textContent = data.orders||0;
-        document.getElementById('kpi_lines').textContent = data.lines||0;
-        const tb = document.querySelector('#today_items tbody'); tb.innerHTML='';
-        (data.items||[]).forEach(row=>{
-            const tr = el('tr');
-            tr.appendChild(el('td', null, row.name));
-            tr.appendChild(el('td', null, row.qty));
-            tr.appendChild(el('td', {className:'muted'}, fmt(row.amount)));
+        if(!data.ok) return;
+        document.getElementById('summary-date').textContent = data.date_label;
+        document.getElementById('sum-total').textContent = data.total.toFixed(2);
+        document.getElementById('sum-currency').textContent = data.currency;
+        document.getElementById('sum-count').textContent = data.count;
+        const tb = document.querySelector('#sales-table tbody'); tb.innerHTML='';
+        (data.rows||[]).forEach(r=>{
+            const tr=document.createElement('tr');
+            tr.innerHTML = `<td>${r.ts}</td><td>${r.item_name}</td><td>${r.qty}</td><td>${r.price.toFixed(2)} ${data.currency}</td><td>${r.total.toFixed(2)} ${data.currency}</td>`;
             tb.appendChild(tr);
         });
-        const list = document.getElementById('recent_orders'); list.innerHTML='';
-        (data.recent||[]).forEach(o=> list.appendChild(renderOrder(o)) );
-    }
-
-    function renderOrder(o){
-        const card = el('div', {className:'order'});
-        const head = el('div', {className:'order-head'});
-        const when = new Date(o.created_at || o.ts || Date.now()).toLocaleString();
-        head.appendChild(el('div', null, `<strong>#${o.id}</strong> · ${when} · <span class="muted">${o.payment_name||o.payment||''}</span>`));
-        head.appendChild(el('div', {style:'font-weight:800'}, fmt(o.total)));
-        card.appendChild(head);
-        const items = el('div', {className:'order-items'});
-        (o.lines||o.items||[]).forEach(li=> items.appendChild(el('div', {className:'order-item'}, `${li.qty}× ${li.name}`)) );
-        card.appendChild(items);
-        return card;
-    }
-
-    // Artikel
-    async function refreshItems(){
-        const r = await fetch('/api/items');
-        const data = await r.json();
-        const box = document.getElementById('items_list'); box.innerHTML='';
-        (data||[]).forEach(it=>{
-            const line = document.createElement('div'); line.className='line';
-            line.appendChild(el('div', {className:'grow'}, `<strong>${it.name}</strong><div class='muted'>#${it.id}</div>`));
-            const name = el('input', {type:'text', value: it.name});
-            const price = el('input', {type:'number', step:'0.05', value: (Number(it.price)||0).toFixed(2)});
-            const save = el('button', {className:'btn'}, 'Speichern');
-            const del = el('button', {className:'btn btn-danger'}, 'Löschen');
-            save.onclick=async()=>{ await fetch(`/api/items/${it.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:name.value, price:parseFloat(price.value)})}); refreshItems(); };
-            del.onclick=async()=>{ await fetch(`/api/items/${it.id}`, {method:'DELETE'}); refreshItems(); };
-            line.appendChild(name); line.appendChild(price); line.appendChild(save); line.appendChild(del);
-            box.appendChild(line);
+        const pi = document.querySelector('#per-item tbody'); pi.innerHTML='';
+        (data.per_item||[]).forEach(r=>{
+            const tr=document.createElement('tr'); tr.innerHTML = `<td>${r.item_name}</td><td>${r.qty}</td><td>${r.total.toFixed(2)} ${data.currency}</td>`; pi.appendChild(tr);
         });
     }
-    document.getElementById('item_add').onclick=async()=>{
-        const name=document.getElementById('item_name').value.trim();
-        const price=parseFloat(document.getElementById('item_price').value||'0');
-        if(!name||price<=0) return;
-        await fetch('/api/items', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, price})});
-        document.getElementById('item_name').value=''; document.getElementById('item_price').value='';
-        refreshItems();
-    };
 
-    // Benutzer
-    async function refreshUsers(){
-        const r = await fetch('/api/users');
-        const payload = await r.json();
-        const data = Array.isArray(payload) ? payload : (payload.users||payload);
-        const box = document.getElementById('users_list'); box.innerHTML='';
-        (data||[]).forEach(u=>{
-            const line = document.createElement('div'); line.className='line';
-            line.appendChild(el('div', {className:'grow'}, `<strong>${u.username}</strong><div class='muted'>#${u.id}${u.is_admin?' · Admin':''}</div>`));
-            const name = el('input', {type:'text', value: u.username});
-            const pin = el('input', {type:'text', placeholder:'Neue PIN (leer = unverändert)'});
-            const admin = el('input', {type:'checkbox'}); admin.checked = !!u.is_admin;
-            const save = el('button', {className:'btn'}, 'Speichern');
-            const del = el('button', {className:'btn btn-danger'}, 'Löschen');
-            save.onclick=async()=>{
-                const payload = {username:name.value, is_admin: admin.checked};
-                if(pin.value.trim()) payload['pin']=pin.value.trim();
-                await fetch(`/api/users/${u.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
-                refreshUsers();
-            };
-            del.onclick=async()=>{ await fetch(`/api/users/${u.id}`, {method:'DELETE'}); refreshUsers(); };
-            line.appendChild(name); line.appendChild(pin); line.appendChild(admin); line.appendChild(save); line.appendChild(del);
-            box.appendChild(line);
-        });
+    // ---- Items CRUD ----
+    let items=[];
+    function itemRow(it){
+        const tr=document.createElement('tr'); tr.dataset.id=it.id||'';
+        tr.innerHTML = `<td><input type="number" value="${it.sort??0}" style="width:80px"></td>
+      <td><input type="text" value="${it.name||''}"></td>
+      <td><input type="number" step="0.05" min="0" value="${(it.price??0).toFixed(2)}" style="width:120px"></td>
+      <td><input type="checkbox" ${it.active?'checked':''}></td>
+      <td><button class="btn-outline" onclick="dupItem(this)">Duplizieren</button>
+          <button class="btn-outline" onclick="delRow(this)">Löschen</button></td>`;
+        return tr;
     }
-    document.getElementById('user_add').onclick=async()=>{
-        const username=document.getElementById('user_name').value.trim();
-        const pin=document.getElementById('user_pin').value.trim();
-        const is_admin=document.getElementById('user_admin').checked;
-        if(!username||!pin) return;
-        await fetch('/api/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username, pin, is_admin})});
-        document.getElementById('user_name').value=''; document.getElementById('user_pin').value=''; document.getElementById('user_admin').checked=false;
-        refreshUsers();
-    };
+    function renderItems(){ const tb=document.querySelector('#items-table tbody'); tb.innerHTML=''; items.sort((a,b)=>(a.sort||0)-(b.sort||0)); items.forEach(i=>tb.appendChild(itemRow(i))); }
+    function addItemRow(){ document.querySelector('#items-table tbody').appendChild(itemRow({name:'Neuer Artikel',price:0,active:true,sort:(items.length?Math.max(...items.map(i=>i.sort||0))+1:0)})); }
+    function dupItem(btn){ const tr=btn.closest('tr'); const [s,n,p,a]=tr.querySelectorAll('input'); const clone=itemRow({sort:parseInt(s.value||0)+1, name:n.value+" (Kopie)", price:parseFloat(p.value||0), active:a.checked}); tr.after(clone); }
 
-    // Zahlarten
-    async function refreshPM(){
-        const r = await fetch('/api/payments');
-        const data = await r.json();
-        const box = document.getElementById('pm_list'); box.innerHTML='';
-        (data||[]).forEach(p=>{
-            const line = document.createElement('div'); line.className='line';
-            line.appendChild(el('div', {className:'grow'}, `<strong>${p.name}</strong><div class='muted'>#${p.id}${p.protected? ' · geschützt':''}</div>`));
-            const name = el('input', {type:'text', value: p.name});
-            const prot = el('input', {type:'checkbox'}); prot.checked = !!p.protected;
-            const save = el('button', {className:'btn'}, 'Speichern');
-            const del = el('button', {className:'btn btn-danger'}, 'Löschen'); if(p.protected){ del.disabled=true; del.title='Geschützte Zahlart kann nicht gelöscht werden'; }
-            save.onclick=async()=>{ await fetch(`/api/payments/${p.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:name.value, protected: prot.checked})}); refreshPM(); };
-            del.onclick=async()=>{ await fetch(`/api/payments/${p.id}`, {method:'DELETE'}); refreshPM(); };
-            line.appendChild(name); line.appendChild(prot); line.appendChild(save); line.appendChild(del);
-            box.appendChild(line);
-        });
+    async function loadItems(){ const r=await fetch('/api/items'); const data=await r.json(); items=data.items||[]; renderItems(); }
+    async function saveAllItems(){ const rows=[...document.querySelectorAll('#items-table tbody tr')]; const payload=rows.map(tr=>{const [s,n,p,a]=tr.querySelectorAll('input'); return {id:tr.dataset.id||null, delete:tr.dataset.delete==='1', sort:parseInt(s.value||0), name:n.value.trim(), price:parseFloat(p.value||0), active:a.checked};}); const r=await fetch('/api/items/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:payload})}); const d=await r.json(); const el=document.getElementById('items-status'); if(d.ok){ el.textContent='Gespeichert.'; await loadItems(); setTimeout(()=>el.textContent='',1500);} else { el.textContent='Fehler'; } }
+
+    function delRow(btn){ const tr=btn.closest('tr'); if(tr.dataset.id){ tr.dataset.delete='1'; tr.style.opacity=.5; } else tr.remove(); }
+
+    // ---- Users CRUD ----
+    let users=[];
+    function userRow(u){
+        const tr=document.createElement('tr'); tr.dataset.id=u.id||'';
+        tr.innerHTML = `<td><input type="text" value="${u.username||''}"></td>
+      <td><input type="password" placeholder="neu setzen…"></td>
+      <td><input type="checkbox" ${u.is_admin?'checked':''}></td>
+      <td><input type="checkbox" ${u.active?'checked':''}></td>
+      <td><button class="btn-outline" onclick="delRow(this)">Löschen</button></td>`;
+        return tr;
     }
-    document.getElementById('pm_add').onclick=async()=>{
-        const name=document.getElementById('pm_name').value.trim();
-        const prot=document.getElementById('pm_prot').checked;
-        if(!name) return;
-        await fetch('/api/payments', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, protected: prot})});
-        document.getElementById('pm_name').value=''; document.getElementById('pm_prot').checked=false;
-        refreshPM();
-    };
+    function renderUsers(){ const tb=document.querySelector('#users-table tbody'); tb.innerHTML=''; users.forEach(u=>tb.appendChild(userRow(u))); }
+    function addUserRow(){ document.querySelector('#users-table tbody').appendChild(userRow({username:'', is_admin:false, active:true})); }
+    async function loadUsers(){ const r=await fetch('/api/users'); const d=await r.json(); users=d.users||[]; renderUsers(); }
+    async function saveAllUsers(){ const rows=[...document.querySelectorAll('#users-table tbody tr')]; const payload=rows.map(tr=>{const [name,pin,admin,active]=tr.querySelectorAll('input'); return {id:tr.dataset.id||null, delete:tr.dataset.delete==='1', username:name.value.trim(), pin:pin.value.trim(), is_admin:admin.checked, active:active.checked};}); const r=await fetch('/api/users/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:payload})}); const d=await r.json(); const el=document.getElementById('users-status'); if(d.ok){ el.textContent='Gespeichert.'; await loadUsers(); setTimeout(()=>el.textContent='',1500);} else { el.textContent='Fehler'; }
+    }
 
-    // Boot
-    loadToday();
-    refreshItems();
-    refreshUsers();
-    refreshPM();
+    // ---- Payment Methods CRUD ----
+    let methods=[];
+    function pmRow(m){
+        const tr=document.createElement('tr'); tr.dataset.id=m.id||''; if(m.protected) tr.dataset.protected='1';
+        tr.innerHTML = `<td><input type="number" value="${m.sort??0}" style="width:80px"></td>
+      <td><input type="text" value="${m.name||''}"></td>
+      <td><input type="checkbox" ${m.active?'checked':''}></td>
+      <td>${m.protected? 'Ja':'Nein'}</td>
+      <td>${m.protected? '—': '<button class="btn-outline" onclick="delRow(this)">Löschen</button>'}</td>`;
+        return tr;
+    }
+    function renderPM(){ const tb=document.querySelector('#pm-table tbody'); tb.innerHTML=''; methods.sort((a,b)=>(a.sort||0)-(b.sort||0)); methods.forEach(m=>tb.appendChild(pmRow(m))); }
+    function addPMRow(){ document.querySelector('#pm-table tbody').appendChild(pmRow({name:'Neue Zahlart', active:true, sort:(methods.length?Math.max(...methods.map(i=>i.sort||0))+1:0), protected:false})); }
+    async function loadPM(){ const r=await fetch('/api/payment_methods'); const d=await r.json(); methods=d.methods||[]; renderPM(); }
+    async function saveAllPM(){ const rows=[...document.querySelectorAll('#pm-table tbody tr')]; const payload=rows.map(tr=>{const [s,n,a]=tr.querySelectorAll('input'); return {id:tr.dataset.id||null, delete:tr.dataset.delete==='1', sort:parseInt(s.value||0), name:n.value.trim(), active:a.checked, protected: tr.dataset.protected==='1'};}); const r=await fetch('/api/payment_methods/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({methods:payload})}); const d=await r.json(); const el=document.getElementById('pm-status'); if(d.ok){ el.textContent='Gespeichert.'; await loadPM(); setTimeout(()=>el.textContent='',1500);} else { el.textContent='Fehler'; }
+    }
+
+    // Init
+    loadSales(); loadItems(); loadUsers(); loadPM();
 </script>
 </body>
 </html>
