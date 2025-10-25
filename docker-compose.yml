@@ -1,0 +1,16 @@
+services:
+  pos:
+    build: .
+    container_name: hotdog-pos
+    environment:
+      - POS_SECRET=${POS_SECRET}
+      - POS_DB=/app/data/sales.db
+    volumes:
+      - ./data:/app/data:rw
+    ports:
+      - "8080:8000"
+    restart: unless-stopped
+#networks:
+#  npm:
+#    external: true
+#    name: npm_default
