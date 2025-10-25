@@ -408,34 +408,94 @@ def api_users_bulk():
     users = data.get("users", [])
     if not isinstance(users, list):
         return jsonify(ok=False, msg="Invalid payload"), 400
+
     c = conn(); cur = c.cursor()
+
+    # Anzahl aktiver Admins ermitteln
+    admin_count = cur.execute(
+        "SELECT COUNT(*) FROM users WHERE is_admin=1 AND active=1"
+    ).fetchone()[0]
+
+    skipped = []  # Nutzer, bei denen Admin-Schutz gegriffen hat
+
     for u in users:
-        _id = u.get("id"); _delete = bool(u.get("delete"))
+        _id = u.get("id")
+        _delete = bool(u.get("delete"))
         username = (u.get("username") or "").strip()
-        is_admin = 1 if u.get("is_admin") else 0
-        active = 1 if u.get("active") else 0
+        is_admin_new = 1 if u.get("is_admin") else 0
+        active_new = 1 if u.get("active") else 0
         new_pin = (u.get("pin") or "").strip()
+
         if _id and _delete:
-            cur.execute("DELETE FROM users WHERE id=?", (_id,)); continue
+            row = cur.execute("SELECT username,is_admin,active FROM users WHERE id=?", (_id,)).fetchone()
+            if not row:
+                continue
+            was_admin_active = bool(row["is_admin"]) and bool(row["active"])
+            if was_admin_active and admin_count <= 1:
+                skipped.append(row["username"] or f"#{_id}")
+                continue
+            cur.execute("DELETE FROM users WHERE id=?", (_id,))
+            if was_admin_active:
+                admin_count -= 1
+            continue
+
         if _id:
+            row = cur.execute("SELECT username,is_admin,active FROM users WHERE id=?", (_id,)).fetchone()
+            if not row:
+                continue
+            was_admin_active = bool(row["is_admin"]) and bool(row["active"])
+            will_be_admin_active = bool(is_admin_new) and bool(active_new)
+
+            # Würde diese Änderung den letzten aktiven Admin "verlieren"?
+            if was_admin_active and not will_be_admin_active and admin_count <= 1:
+                # Admin-/Aktiv-Flags erzwingen, damit mindestens 1 Admin bleibt
+                skipped.append(row["username"] or f"#{_id}")
+                if new_pin:
+                    cur.execute(
+                        "UPDATE users SET username=?, is_admin=1, active=1, pin_hash=? WHERE id=?",
+                        (username, generate_password_hash(new_pin), _id),
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE users SET username=?, is_admin=1, active=1 WHERE id=?",
+                        (username, _id),
+                    )
+                # admin_count bleibt unverändert (weiterhin Admin aktiv)
+                continue
+
+            # Änderungen sind erlaubt -> ggf. Zähler anpassen
+            became_admin_active = (not was_admin_active) and will_be_admin_active
+            left_admin_active = was_admin_active and (not will_be_admin_active)
+            if became_admin_active:
+                admin_count += 1
+            if left_admin_active:
+                admin_count -= 1
+
             if new_pin:
                 cur.execute(
                     "UPDATE users SET username=?, is_admin=?, active=?, pin_hash=? WHERE id=?",
-                    (username, is_admin, active, generate_password_hash(new_pin), _id),
+                    (username, is_admin_new, active_new, generate_password_hash(new_pin), _id),
                 )
             else:
                 cur.execute(
                     "UPDATE users SET username=?, is_admin=?, active=? WHERE id=?",
-                    (username, is_admin, active, _id),
+                    (username, is_admin_new, active_new, _id),
                 )
-        else:
-            if not new_pin:
-                new_pin = "0000"
-            cur.execute(
-                "INSERT INTO users(username,pin_hash,is_admin,active) VALUES(?,?,?,?)",
-                (username, generate_password_hash(new_pin), is_admin, active),
-            )
-    c.commit(); c.close(); return jsonify(ok=True)
+            continue
+
+        # Neuer Benutzer
+        if not new_pin:
+            new_pin = "0000"
+        cur.execute(
+            "INSERT INTO users(username,pin_hash,is_admin,active) VALUES(?,?,?,?)",
+            (username, generate_password_hash(new_pin), is_admin_new, active_new),
+        )
+        if is_admin_new and active_new:
+            admin_count += 1
+
+    c.commit(); c.close()
+    # Optional: Warnungen zurückgeben (Frontend nutzt aktuell nur ok)
+    return jsonify(ok=True, warn=(skipped if skipped else None))
 
 
 @app.route("/api/admin/summary")
