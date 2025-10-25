@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>Admin – Kasse</title>
+    <style>
+        :root{ --bg:#f6f8fa; --panel:#fff; --ink:#111; --muted:#6b7280; }
+        *{ box-sizing:border-box }
+        body{ margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--ink) }
+        header{ background:#111; color:#fff; padding:12px 16px; display:flex; align-items:center; gap:8px }
+        header .right{ margin-left:auto; display:flex; gap:8px }
+        header a{ color:#fff; text-decoration:none; background:#2a2a2a; padding:6px 10px; border-radius:10px }
+        .wrap{ max-width:1100px; margin:0 auto; padding:16px }
+
+        .tabs{ display:flex; gap:8px; flex-wrap:wrap }
+        .tab-btn{ border:2px solid #ddd; background:#fff; border-radius:12px; padding:10px 14px; cursor:pointer }
+        .tab-btn.active{ border-color:#111 }
+        .tab{ display:none; margin-top:14px }
+        .tab.active{ display:block }
+
+        .card{ background:var(--panel); border-radius:16px; padding:14px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+        h2{ margin:0 0 10px; font-size:18px }
+        .muted{ color:var(--muted) }
+
+        .grid3{ display:grid; grid-template-columns:repeat(3, 1fr); gap:12px }
+        @media (max-width: 800px){ .grid3{ grid-template-columns:repeat(2, 1fr) } }
+        @media (max-width: 520px){ .grid3{ grid-template-columns:1fr } }
+
+        .kpi{ background:#fff; border:2px solid #eee; border-radius:14px; padding:12px }
+        .kpi .label{ font-size:12px; color:var(--muted) }
+        .kpi .value{ font-size:24px; font-weight:800 }
+
+        table{ width:100%; border-collapse:separate; border-spacing:0; }
+        th, td{ text-align:left; padding:10px 12px; border-bottom:1px solid #eee; vertical-align:top }
+        th{ font-size:12px; color:var(--muted); font-weight:600 }
+
+        .list{ display:grid; gap:10px }
+        .line{ display:flex; gap:8px; align-items:center; justify-content:space-between; background:#fff; border:1px solid #eee; border-radius:12px; padding:10px }
+        .grow{ flex:1 }
+        .btn{ border:none; border-radius:10px; padding:8px 12px; background:#111; color:#fff; cursor:pointer }
+        .btn.secondary{ background:#666 }
+        .btn.danger{ background:#b00020 }
+
+        .order{ border:1px solid #eee; border-radius:14px; padding:10px; background:#fff }
+        .order-head{ display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:6px }
+        .order-items{ display:flex; flex-wrap:wrap; gap:6px }
+        .order-item{ background:#f6f6f6; border-radius:10px; padding:6px 8px; font-size:13px }
+    </style>
+</head>
+<body>
+<header>
+    <div>Admin – Kasse</div>
+    <div class="right">
+        <a href="/">Zur Kasse</a>
+        <a href="/logout">Logout</a>
+    </div>
+</header>
+
+<div class="wrap">
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="overview">Übersicht (Heute)</button>
+        <button class="tab-btn" data-tab="items">Artikel</button>
+        <button class="tab-btn" data-tab="users">Benutzer</button>
+        <button class="tab-btn" data-tab="payments">Zahlarten</button>
+    </div>
+
+    <section id="overview" class="tab active">
+        <div class="grid3">
+            <div class="kpi"><div class="label">Umsatz heute</div><div class="value" id="kpi_amount">–</div></div>
+            <div class="kpi"><div class="label">Verkäufe heute</div><div class="value" id="kpi_orders">–</div></div>
+            <div class="kpi"><div class="label">Positionen heute</div><div class="value" id="kpi_lines">–</div></div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+            <h2>Verkaufte Mengen pro Artikel (heute)</h2>
+            <table id="today_items">
+                <thead><tr><th>Artikel</th><th>Menge</th><th class="muted">Umsatz</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+            <h2>Letzte Bestellungen (20)</h2>
+            <div id="recent_orders" class="list"></div>
+        </div>
+    </section>
+
+    <section id="items" class="tab">
+        <div class="card">
+            <h2>Artikel</h2>
+            <div class="line" style="margin-bottom:8px">
+                <input id="item_name" type="text" placeholder="Name" />
+                <input id="item_price" type="number" step="0.05" min="0" placeholder="Preis" />
+                <button id="item_add" class="btn">Hinzufügen</button>
+            </div>
+            <div id="items_list" class="list"></div>
+        </div>
+    </section>
+
+    <section id="users" class="tab">
+        <div class="card">
+            <h2>Benutzer</h2>
+            <div class="line" style="margin-bottom:8px">
+                <input id="user_name" type="text" placeholder="Benutzername" />
+                <input id="user_pin" type="text" placeholder="PIN" />
+                <label><input type="checkbox" id="user_admin" /> Admin</label>
+                <button id="user_add" class="btn">Hinzufügen</button>
+            </div>
+            <div id="users_list" class="list"></div>
+        </div>
+    </section>
+
+    <section id="payments" class="tab">
+        <div class="card">
+            <h2>Zahlarten</h2>
+            <div class="line" style="margin-bottom:8px">
+                <input id="pm_name" type="text" placeholder="Name (z.B. Twint)" />
+                <label><input type="checkbox" id="pm_prot" /> Geschützt</label>
+                <button id="pm_add" class="btn">Hinzufügen</button>
+            </div>
+            <div id="pm_list" class="list"></div>
+        </div>
+    </section>
+</div>
+
+<script>
+    // Tabs
+    document.querySelectorAll('.tab-btn').forEach(b=>{
+        b.onclick=()=>{
+            document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+            b.classList.add('active');
+            const id=b.dataset.tab; document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.id===id));
+        };
+    });
+
+    const CURRENCY = 'CHF';
+    const fmt = (n)=> (Number(n)||0).toFixed(2) + ' ' + CURRENCY;
+    const el = (tag, attrs, html)=>{ const e=document.createElement(tag); if(attrs) Object.assign(e, attrs); if(html!=null) e.innerHTML=html; return e; };
+
+    // Übersicht (heute)
+    async function loadToday(){
+        const r = await fetch('/api/admin/today');
+        const data = await r.json();
+        document.getElementById('kpi_amount').textContent = fmt(data.amount);
+        document.getElementById('kpi_orders').textContent = data.orders||0;
+        document.getElementById('kpi_lines').textContent = data.lines||0;
+        const tb = document.querySelector('#today_items tbody'); tb.innerHTML='';
+        (data.items||[]).forEach(row=>{
+            const tr = el('tr');
+            tr.appendChild(el('td', null, row.name));
+            tr.appendChild(el('td', null, row.qty));
+            tr.appendChild(el('td', {className:'muted'}, fmt(row.amount)));
+            tb.appendChild(tr);
+        });
+        const list = document.getElementById('recent_orders'); list.innerHTML='';
+        (data.recent||[]).forEach(o=> list.appendChild(renderOrder(o)) );
+    }
+
+    function renderOrder(o){
+        const card = el('div', {className:'order'});
+        const head = el('div', {className:'order-head'});
+        const when = new Date(o.created_at || o.ts || Date.now()).toLocaleString();
+        head.appendChild(el('div', null, `<strong>#${o.id}</strong> · ${when} · <span class="muted">${o.payment_name||o.payment||''}</span>`));
+        head.appendChild(el('div', {style:'font-weight:800'}, fmt(o.total)));
+        card.appendChild(head);
+        const items = el('div', {className:'order-items'});
+        (o.lines||o.items||[]).forEach(li=> items.appendChild(el('div', {className:'order-item'}, `${li.qty}× ${li.name}`)) );
+        card.appendChild(items);
+        return card;
+    }
+
+    // Artikel
+    async function refreshItems(){
+        const r = await fetch('/api/items');
+        const data = await r.json();
+        const box = document.getElementById('items_list'); box.innerHTML='';
+        (data||[]).forEach(it=>{
+            const line = document.createElement('div'); line.className='line';
+            line.appendChild(el('div', {className:'grow'}, `<strong>${it.name}</strong><div class='muted'>#${it.id}</div>`));
+            const name = el('input', {type:'text', value: it.name});
+            const price = el('input', {type:'number', step:'0.05', value: (Number(it.price)||0).toFixed(2)});
+            const save = el('button', {className:'btn'}, 'Speichern');
+            const del = el('button', {className:'btn btn-danger'}, 'Löschen');
+            save.onclick=async()=>{ await fetch(`/api/items/${it.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:name.value, price:parseFloat(price.value)})}); refreshItems(); };
+            del.onclick=async()=>{ await fetch(`/api/items/${it.id}`, {method:'DELETE'}); refreshItems(); };
+            line.appendChild(name); line.appendChild(price); line.appendChild(save); line.appendChild(del);
+            box.appendChild(line);
+        });
+    }
+    document.getElementById('item_add').onclick=async()=>{
+        const name=document.getElementById('item_name').value.trim();
+        const price=parseFloat(document.getElementById('item_price').value||'0');
+        if(!name||price<=0) return;
+        await fetch('/api/items', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, price})});
+        document.getElementById('item_name').value=''; document.getElementById('item_price').value='';
+        refreshItems();
+    };
+
+    // Benutzer
+    async function refreshUsers(){
+        const r = await fetch('/api/users');
+        const payload = await r.json();
+        const data = Array.isArray(payload) ? payload : (payload.users||payload);
+        const box = document.getElementById('users_list'); box.innerHTML='';
+        (data||[]).forEach(u=>{
+            const line = document.createElement('div'); line.className='line';
+            line.appendChild(el('div', {className:'grow'}, `<strong>${u.username}</strong><div class='muted'>#${u.id}${u.is_admin?' · Admin':''}</div>`));
+            const name = el('input', {type:'text', value: u.username});
+            const pin = el('input', {type:'text', placeholder:'Neue PIN (leer = unverändert)'});
+            const admin = el('input', {type:'checkbox'}); admin.checked = !!u.is_admin;
+            const save = el('button', {className:'btn'}, 'Speichern');
+            const del = el('button', {className:'btn btn-danger'}, 'Löschen');
+            save.onclick=async()=>{
+                const payload = {username:name.value, is_admin: admin.checked};
+                if(pin.value.trim()) payload['pin']=pin.value.trim();
+                await fetch(`/api/users/${u.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+                refreshUsers();
+            };
+            del.onclick=async()=>{ await fetch(`/api/users/${u.id}`, {method:'DELETE'}); refreshUsers(); };
+            line.appendChild(name); line.appendChild(pin); line.appendChild(admin); line.appendChild(save); line.appendChild(del);
+            box.appendChild(line);
+        });
+    }
+    document.getElementById('user_add').onclick=async()=>{
+        const username=document.getElementById('user_name').value.trim();
+        const pin=document.getElementById('user_pin').value.trim();
+        const is_admin=document.getElementById('user_admin').checked;
+        if(!username||!pin) return;
+        await fetch('/api/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username, pin, is_admin})});
+        document.getElementById('user_name').value=''; document.getElementById('user_pin').value=''; document.getElementById('user_admin').checked=false;
+        refreshUsers();
+    };
+
+    // Zahlarten
+    async function refreshPM(){
+        const r = await fetch('/api/payments');
+        const data = await r.json();
+        const box = document.getElementById('pm_list'); box.innerHTML='';
+        (data||[]).forEach(p=>{
+            const line = document.createElement('div'); line.className='line';
+            line.appendChild(el('div', {className:'grow'}, `<strong>${p.name}</strong><div class='muted'>#${p.id}${p.protected? ' · geschützt':''}</div>`));
+            const name = el('input', {type:'text', value: p.name});
+            const prot = el('input', {type:'checkbox'}); prot.checked = !!p.protected;
+            const save = el('button', {className:'btn'}, 'Speichern');
+            const del = el('button', {className:'btn btn-danger'}, 'Löschen'); if(p.protected){ del.disabled=true; del.title='Geschützte Zahlart kann nicht gelöscht werden'; }
+            save.onclick=async()=>{ await fetch(`/api/payments/${p.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:name.value, protected: prot.checked})}); refreshPM(); };
+            del.onclick=async()=>{ await fetch(`/api/payments/${p.id}`, {method:'DELETE'}); refreshPM(); };
+            line.appendChild(name); line.appendChild(prot); line.appendChild(save); line.appendChild(del);
+            box.appendChild(line);
+        });
+    }
+    document.getElementById('pm_add').onclick=async()=>{
+        const name=document.getElementById('pm_name').value.trim();
+        const prot=document.getElementById('pm_prot').checked;
+        if(!name) return;
+        await fetch('/api/payments', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, protected: prot})});
+        document.getElementById('pm_name').value=''; document.getElementById('pm_prot').checked=false;
+        refreshPM();
+    };
+
+    // Boot
+    loadToday();
+    refreshItems();
+    refreshUsers();
+    refreshPM();
+</script>
+</body>
+</html>
