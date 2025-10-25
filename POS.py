@@ -78,10 +78,18 @@ def init_db():
         """
     )
 
-    # Seed Items
+    # Neu: vorhandene Duplikate per Name aufräumen (behält jeweils die kleinste ID)
+    c.execute("DELETE FROM items WHERE id NOT IN (SELECT MIN(id) FROM items GROUP BY name)")
+    c.execute("DELETE FROM payment_methods WHERE id NOT IN (SELECT MIN(id) FROM payment_methods GROUP BY name)")
+
+    # Neu: eindeutige Indizes gegen zukünftige Duplikate
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_items_name ON items(name)")
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_pm_name ON payment_methods(name)")
+
+    # Seed Items (mit OR IGNORE abgesichert)
     if c.execute("SELECT COUNT(*) FROM items").fetchone()[0] == 0:
         c.executemany(
-            "INSERT INTO items(name,price,active,sort) VALUES(?,?,?,?)",
+            "INSERT OR IGNORE INTO items(name,price,active,sort) VALUES(?,?,?,?)",
             [
                 ("Hot Dog", 6.00, 1, 0),
                 ("Veggie Dog", 6.50, 1, 1),
@@ -90,14 +98,14 @@ def init_db():
             ],
         )
 
-    # Seed Payment Methods (Bar geschützt)
+    # Seed Payment Methods (Bar geschützt) – mit OR IGNORE
     if c.execute("SELECT COUNT(*) FROM payment_methods").fetchone()[0] == 0:
         c.executemany(
-            "INSERT INTO payment_methods(name,active,sort,protected) VALUES(?,?,?,?)",
+            "INSERT OR IGNORE INTO payment_methods(name,active,sort,protected) VALUES(?,?,?,?)",
             [("Bar", 1, 0, 1), ("Twint", 1, 1, 0), ("Karte", 1, 2, 0)],
         )
 
-    # Seed Users
+    # Seed Users (username bereits UNIQUE)
     if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         c.execute(
             "INSERT INTO users(username,pin_hash,is_admin,active) VALUES(?,?,?,1)",
@@ -585,5 +593,3 @@ def api_admin_purchases():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
-  # Debug AUS, kein Auto-Reload, Port 8000
-    app.run(host='0.0.0.0', port=8000, debug=False, use_reloader=False)
