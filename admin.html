@@ -24,6 +24,11 @@
         .muted{color:var(--muted)}
         .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#eee}
         .right{margin-left:auto}
+
+        /* Dezente Hervorhebung je Bestellung in Einzelansicht */
+        .sale-group-0 td{ background:#fafcff }
+        .sale-group-1 td{ background:#fffdf6 }
+        .sale-first td{ border-top:2px solid #e8e8e8 }
     </style>
 </head>
 <body>
@@ -34,6 +39,7 @@
 <div class="wrap">
     <div class="tabs">
         <button class="tab-btn active" data-tab="sales">Übersicht</button>
+        <button class="tab-btn" data-tab="purchases">Käufe</button>
         <button class="tab-btn" data-tab="items">Artikel</button>
         <button class="tab-btn" data-tab="users">Benutzer</button>
         <button class="tab-btn" data-tab="payments">Zahlarten</button>
@@ -42,24 +48,66 @@
     <!-- Übersicht / Sales Tab -->
     <section id="tab-sales" class="card">
         <div style="display:flex; gap:12px; align-items:center">
-            <h3 style="margin:0">Tagesübersicht</h3>
+            <h3 style="margin:0">Verkaufte Mengen pro Artikel</h3>
             <span id="summary-date" class="badge"></span>
+            <!-- Neu: Badges direkt neben dem Datum -->
+            <span class="badge">Summe: <span id="sum-total">0.00</span> <span id="sum-currency">CHF</span></span>
+            <span class="badge">Transaktionen: <span id="sum-count">0</span></span>
             <button class="btn-outline right" onclick="exportCSV()">CSV Export</button>
         </div>
+        <!-- Entfernt: separater Badge-Block unter der Überschrift -->
         <div style="overflow:auto;margin-top:10px">
-            <table id="sales-table">
-                <thead><tr><th>Zeit</th><th>Artikel</th><th>Menge</th><th>Preis</th><th>Gesamt</th></tr></thead>
+            <table id="per-item">
+                <thead><tr><th>Artikel</th><th>Menge</th><th>Summe</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
-        <div style="display:flex; gap:12px; align-items:center; margin-top:10px">
-            <div class="badge">Summe: <span id="sum-total">0.00</span> <span id="sum-currency">CHF</span></div>
-            <div class="badge">Transaktionen: <span id="sum-count">0</span></div>
-        </div>
-        <h4 style="margin-top:18px">Verkaufte Mengen pro Artikel (heute)</h4>
+
+        <h4 style="margin-top:18px">Letzte 5 Bestellungen</h4>
         <div style="overflow:auto">
-            <table id="per-item">
-                <thead><tr><th>Artikel</th><th>Menge</th><th>Summe</th></tr></thead>
+            <table id="last-orders-table">
+                <thead><tr><th>Zeit</th><th>Artikel</th><th>Menge</th><th>Zahlart</th><th>Benutzer</th><th>Gesamt</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Käufe Tab (neu) -->
+    <section id="tab-purchases" class="card" style="display:none">
+        <div style="display:flex; gap:12px; align-items:center">
+            <h3 id="purchases-title" style="margin:0">Alle Käufe (gruppiert)</h3>
+            <span class="muted" style="margin-left:8px">Angezeigt in der ursprünglichen Reihenfolge</span>
+            <button class="btn-outline right" onclick="exportCSV()">CSV Export</button>
+        </div>
+
+        <!-- Filterbereich -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
+            <label>Zeitraum:
+                <select id="filter-last">
+                    <option value="">Alle</option>
+                    <!-- letzte 5 Tage mit Daten werden per JS befüllt -->
+                </select>
+            </label>
+            <div id="custom-range" style="display:none;align-items:center;gap:6px">
+                <label>Von <input type="date" id="filter-start"></label>
+                <label>Bis <input type="date" id="filter-end"></label>
+            </div>
+            <label>Zahlart:
+                <select id="filter-pm"><option value="">Alle</option></select>
+            </label>
+            <label>Benutzer:
+                <select id="filter-user"><option value="">Alle</option></select>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px">
+                <input type="checkbox" id="filter-grouped" checked> Gruppiert anzeigen
+            </label>
+            <button class="btn" id="filter-clear">Zurücksetzen</button>
+        </div>
+
+        <div style="overflow:auto;margin-top:10px">
+            <table id="purchases-table">
+                <!-- Behalte TR mit id, die JS bei jedem Laden überschreibt -->
+                <thead><tr id="purchases-head"><th>Zeit</th><th>Artikel</th><th>Zahlart</th><th>Benutzer</th><th>Gesamt</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -119,7 +167,7 @@
             document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
             btn.classList.add('active');
             const tab = btn.dataset.tab;
-            ['sales','items','users','payments'].forEach(t=>{
+            ['sales','purchases','items','users','payments'].forEach(t=>{
                 document.getElementById('tab-'+t).style.display = (t===tab)?'block':'none';
             });
         });
@@ -127,25 +175,143 @@
 
     function exportCSV(){ window.location='/export.csv'; }
 
+    // --- Filter Hilfsfunktionen ---
+    function formatDayLabel(date){
+        return date.toLocaleDateString('de-DE',{weekday:'short', day:'2-digit', month:'2-digit'});
+    }
+
+    // Neu: verfügbare Tage (max. 5) vom Server laden
+    async function populateLastDays(){
+        const sel=document.getElementById('filter-last');
+        sel.innerHTML = '<option value="">Alle</option>';
+        try{
+            const r=await fetch('/api/admin/available_days');
+            const d=await r.json();
+            const days=(d.ok && d.days)? d.days : [];
+            days.forEach((day, idx)=>{
+                const val = day.date; // YYYY-MM-DD
+                const dt = new Date(val + 'T00:00:00');
+                const label = formatDayLabel(dt);
+                const opt=document.createElement('option');
+                opt.value = val; opt.textContent = label;
+                sel.appendChild(opt);
+            });
+        }catch(e){ /* still show default options */ }
+        const cust=document.createElement('option'); cust.value='custom'; cust.textContent='Benutzerdefiniert...'; sel.appendChild(cust);
+        sel.addEventListener('change', ()=>{
+            document.getElementById('custom-range').style.display = sel.value==='custom' ? 'flex' : 'none';
+            loadPurchases();
+        });
+    }
+
+    async function populatePMandUsers(){
+        // Zahlarten
+        const pmSel=document.getElementById('filter-pm'); pmSel.innerHTML='<option value="">Alle</option>';
+        const rpm=await fetch('/api/payment_methods'); const dpm=await rpm.json(); (dpm.methods||[]).forEach(m=>{ const o=document.createElement('option'); o.value=m.id; o.textContent=m.name; pmSel.appendChild(o); });
+        // Users
+        const uSel=document.getElementById('filter-user'); uSel.innerHTML='<option value="">Alle</option>';
+        const ru=await fetch('/api/users'); const du=await ru.json(); (du.users||[]).forEach(u=>{ const o=document.createElement('option'); o.value=u.id; o.textContent=u.username; uSel.appendChild(o); });
+    }
+
+    function getFilterParams(){
+        const sel=document.getElementById('filter-last').value;
+        const params = {};
+        if(sel && sel!=='custom'){
+            params.start = sel;
+            params.end = sel;
+        } else if(sel==='custom'){
+            const s=document.getElementById('filter-start').value;
+            const e=document.getElementById('filter-end').value;
+            if(s) params.start = s;
+            if(e) params.end = e;
+        }
+        const pm = document.getElementById('filter-pm').value; if(pm) params.payment_method_id = pm;
+        const user = document.getElementById('filter-user').value; if(user) params.user_id = user;
+        params.group = document.getElementById('filter-grouped').checked ? '1' : '0';
+        return params;
+    }
+
     // ---- Load Sales ----
     async function loadSales(){
         const r = await fetch('/api/admin/summary');
         const data = await r.json();
         if(!data.ok) return;
+
+        // Datum/Badges und Summen
         document.getElementById('summary-date').textContent = data.date_label;
         document.getElementById('sum-total').textContent = data.total.toFixed(2);
         document.getElementById('sum-currency').textContent = data.currency;
         document.getElementById('sum-count').textContent = data.count;
-        const tb = document.querySelector('#sales-table tbody'); tb.innerHTML='';
-        (data.rows||[]).forEach(r=>{
-            const tr=document.createElement('tr');
-            tr.innerHTML = `<td>${r.ts}</td><td>${r.item_name}</td><td>${r.qty}</td><td>${r.price.toFixed(2)} ${data.currency}</td><td>${r.total.toFixed(2)} ${data.currency}</td>`;
-            tb.appendChild(tr);
-        });
+
+        // Per-Artikel
         const pi = document.querySelector('#per-item tbody'); pi.innerHTML='';
         (data.per_item||[]).forEach(r=>{
-            const tr=document.createElement('tr'); tr.innerHTML = `<td>${r.item_name}</td><td>${r.qty}</td><td>${r.total.toFixed(2)} ${data.currency}</td>`; pi.appendChild(tr);
+            const tr=document.createElement('tr');
+            tr.innerHTML = `<td>${r.item_name}</td><td>${r.qty}</td><td>${(+r.total).toFixed(2)} ${data.currency}</td>`;
+            pi.appendChild(tr);
         });
+
+        // Letzte 5 Bestellungen (Einzelposten, farblich gruppiert)
+        const tb = document.querySelector('#last-orders-table tbody'); tb.innerHTML='';
+        let lastSaleId = null, groupIdx = 1;
+        (data.last5_rows||[]).forEach(rw=>{
+            const tr=document.createElement('tr');
+            let firstOfSale = false;
+            if(rw.sale_id !== lastSaleId){
+                groupIdx = 1 - groupIdx;
+                lastSaleId = rw.sale_id;
+                firstOfSale = true;
+            }
+            tr.classList.add(`sale-group-${groupIdx}`);
+            if(firstOfSale) tr.classList.add('sale-first');
+            tr.innerHTML = `<td>${rw.ts}</td><td>${rw.item_name}</td><td>${rw.qty}</td><td>${rw.payment_method||''}</td><td>${rw.user||''}</td><td>${(+rw.total).toFixed(2)} ${data.currency}</td>`;
+            tb.appendChild(tr);
+        });
+    }
+
+    // ---- Load Purchases (neu) ----
+    async function loadPurchases(){
+        const params = getFilterParams();
+        const qs = new URLSearchParams(params).toString();
+        const r = await fetch('/api/admin/purchases' + (qs?('?'+qs):''));
+        const data = await r.json();
+        if(!data.ok) return;
+
+        const titleEl = document.getElementById('purchases-title');
+        if(titleEl) titleEl.textContent = data.grouped ? 'Alle Käufe (gruppiert)' : 'Alle Käufe (Einzelposten)';
+
+        const head = document.getElementById('purchases-head');
+        if(data.grouped){
+            head.innerHTML = '<th>Zeit</th><th>Artikel</th><th>Zahlart</th><th>Benutzer</th><th>Gesamt</th>';
+        } else {
+            head.innerHTML = '<th>Zeit</th><th>Artikel</th><th>Menge</th><th>Zahlart</th><th>Benutzer</th><th>Gesamt</th>';
+        }
+
+        const tb = document.querySelector('#purchases-table tbody'); tb.innerHTML='';
+        if(data.grouped){
+            (data.purchases||[]).forEach(p=>{
+                const tr=document.createElement('tr');
+                const itemsStr = (p.lines||[]).map(l=>`${l.qty}x ${l.item_name}`).join(', ');
+                tr.innerHTML = `<td>${p.ts}</td><td>${itemsStr}</td><td>${p.payment_method||''}</td><td>${p.user||''}</td><td>${p.total.toFixed(2)} ${data.currency}</td>`;
+                tb.appendChild(tr);
+            });
+        } else {
+            // Einzelposten: farblich pro Bestellung gruppieren
+            let lastSaleId = null, groupIdx = 1; // wird beim ersten Wechsel getoggelt
+            (data.rows||[]).forEach((rw, i)=>{
+                const tr=document.createElement('tr');
+                let firstOfSale = false;
+                if(rw.sale_id !== lastSaleId){
+                    groupIdx = 1 - groupIdx; // 0/1 abwechseln
+                    lastSaleId = rw.sale_id;
+                    firstOfSale = true;
+                }
+                tr.classList.add(`sale-group-${groupIdx}`);
+                if(firstOfSale) tr.classList.add('sale-first');
+                tr.innerHTML = `<td>${rw.ts}</td><td>${rw.item_name}</td><td>${rw.qty}</td><td>${rw.payment_method||''}</td><td>${rw.user||''}</td><td>${rw.total.toFixed(2)} ${data.currency}</td>`;
+                tb.appendChild(tr);
+            });
+        }
     }
 
     // ---- Items CRUD ----
@@ -203,8 +369,25 @@
     async function saveAllPM(){ const rows=[...document.querySelectorAll('#pm-table tbody tr')]; const payload=rows.map(tr=>{const [s,n,a]=tr.querySelectorAll('input'); return {id:tr.dataset.id||null, delete:tr.dataset.delete==='1', sort:parseInt(s.value||0), name:n.value.trim(), active:a.checked, protected: tr.dataset.protected==='1'};}); const r=await fetch('/api/payment_methods/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({methods:payload})}); const d=await r.json(); const el=document.getElementById('pm-status'); if(d.ok){ el.textContent='Gespeichert.'; await loadPM(); setTimeout(()=>el.textContent='',1500);} else { el.textContent='Fehler'; }
     }
 
+    // Filter-Events
+    // document.getElementById('filter-apply') entfernt
+    document.getElementById('filter-clear').addEventListener('click', ()=>{
+        document.getElementById('filter-last').value=''; document.getElementById('custom-range').style.display='none';
+        document.getElementById('filter-start').value=''; document.getElementById('filter-end').value='';
+        document.getElementById('filter-pm').value=''; document.getElementById('filter-user').value=''; document.getElementById('filter-grouped').checked=true;
+        loadPurchases();
+    });
+    document.getElementById('filter-grouped').addEventListener('change', ()=>loadPurchases());
+    // neu: alle Filter triggern automatisch
+    document.getElementById('filter-pm').addEventListener('change', ()=>loadPurchases());
+    document.getElementById('filter-user').addEventListener('change', ()=>loadPurchases());
+    document.getElementById('filter-start').addEventListener('change', ()=>loadPurchases());
+    document.getElementById('filter-end').addEventListener('change', ()=>loadPurchases());
+
     // Init
-    loadSales(); loadItems(); loadUsers(); loadPM();
+    populateLastDays();
+    populatePMandUsers();
+    loadSales(); loadPurchases(); loadItems(); loadUsers(); loadPM();
 </script>
 </body>
 </html>

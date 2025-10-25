@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, send_file, render_template, redirect, url_for, session
-from datetime import datetime
+from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3, csv, io, os
 
@@ -277,13 +277,23 @@ def undo():
 
 @app.route("/export.csv")
 def export_csv():
-    c = conn(); rows = c.execute(
-        "SELECT ts,item_name,qty,price,total FROM sales ORDER BY id"
-    ).fetchall(); c.close()
+    c = conn()
+    # Export jetzt auf Basis der normalisierten Tabellen inkl. sale_id
+    rows = c.execute(
+        """
+        SELECT h.id AS sale_id, h.ts, l.item_name, l.qty, l.price, l.total
+        FROM sale_lines l
+        JOIN sale_headers h ON h.id = l.sale_id
+        ORDER BY h.id ASC, l.id ASC
+        """
+    ).fetchall()
+    c.close()
+
     buf = io.StringIO(); w = csv.writer(buf, delimiter=';')
-    w.writerow(["Zeit","Artikel","Menge","Preis","Gesamt"])
+    # Header inkl. SaleID
+    w.writerow(["SaleID","Zeit","Artikel","Menge","Preis","Gesamt"])
     for r in rows:
-        w.writerow([r["ts"], r["item_name"], r["qty"], f"{r['price']:.2f}", f"{r['total']:.2f}"])
+        w.writerow([r["sale_id"], r["ts"], r["item_name"], r["qty"], f"{r['price']:.2f}", f"{r['total']:.2f}"])
     mem = io.BytesIO(buf.getvalue().encode("utf-8")); mem.seek(0)
     return send_file(mem, mimetype="text/csv", as_attachment=True, download_name="verkauf.csv")
 
@@ -435,6 +445,27 @@ def api_admin_summary():
             "SELECT item_name, SUM(qty) as qty, SUM(total) as total FROM sales WHERE date(ts)=date('now','localtime') GROUP BY item_name ORDER BY qty DESC"
         ).fetchall()
     ]
+    # Neu: letzte 5 Bestellungen (Einzelposten, farblich gruppierbar via sale_id)
+    last_ids = [r["id"] for r in c.execute(
+        "SELECT id FROM sale_headers ORDER BY id DESC LIMIT 5"
+    ).fetchall()]
+    last5_rows = []
+    if last_ids:
+        q_marks = ",".join(["?"] * len(last_ids))
+        last5_rows = [dict(r) for r in c.execute(
+            f"SELECT l.sale_id as sale_id, h.ts, l.item_name, l.qty, l.price, l.total, "
+            f"u.username as user, p.name as payment_method "
+            f"FROM sale_lines l "
+            f"JOIN sale_headers h ON h.id=l.sale_id "
+            f"LEFT JOIN users u ON u.id=h.user_id "
+            f"LEFT JOIN payment_methods p ON p.id=h.payment_method_id "
+            f"WHERE h.id IN ({q_marks}) "
+            f"ORDER BY h.id DESC, l.id ASC", last_ids
+        ).fetchall()]
+        for r in last5_rows:
+            r["price"] = float(r["price"])
+            r["total"] = float(r["total"])
+
     total = sum(r["total"] for r in rows) if rows else 0
     distinct_ts = {r["ts"] for r in rows}
     count = len(distinct_ts)
@@ -444,10 +475,112 @@ def api_admin_summary():
         date_label=datetime.now().strftime("%Y-%m-%d"),
         rows=rows,
         per_item=per_item,
+        last5_rows=last5_rows,  # neu
         total=round(total, 2),
         count=count,
         currency=CURRENCY,
     )
+
+
+# Neuer Endpoint: verfügbare Tage (max. 5) mit vorhandenen Verkäufen
+@app.route("/api/admin/available_days")
+def api_admin_available_days():
+    c = conn()
+    days = [dict(date=r["d"], count=r["cnt"]) for r in c.execute(
+        "SELECT date(ts) AS d, COUNT(*) AS cnt FROM sale_headers GROUP BY d ORDER BY d DESC LIMIT 5"
+    ).fetchall()]
+    c.close()
+    return jsonify(ok=True, days=days)
+
+# Neuer Endpoint: alle Käufe gruppiert (in Reihenfolge wie gespeichert) + Filter/Group-Option
+@app.route("/api/admin/purchases")
+def api_admin_purchases():
+    c = conn()
+
+    # Query-Parameter
+    start = request.args.get('start')   # YYYY-MM-DD
+    end = request.args.get('end')       # YYYY-MM-DD
+    last = request.args.get('last')     # int Tage (optional)
+    payment_method_id = request.args.get('payment_method_id')
+    user_id = request.args.get('user_id')
+    group = request.args.get('group', '1') in ('1', 'true', 'yes')
+
+    # Wenn 'last' gesetzt: berechne start (inklusive) als heute - (last-1)
+    if last and not (start or end):
+        try:
+            n = int(last)
+            start_date = (datetime.now() - timedelta(days=n-1)).date().isoformat()
+            start = start_date
+            end = datetime.now().date().isoformat()
+        except Exception:
+            pass
+
+    # Baue WHERE-Klausel für sale_headers
+    where_clauses = []
+    params = []
+    if start:
+        where_clauses.append("date(h.ts) >= ?")
+        params.append(start)
+    if end:
+        where_clauses.append("date(h.ts) <= ?")
+        params.append(end)
+    if payment_method_id:
+        where_clauses.append("h.payment_method_id = ?")
+        params.append(payment_method_id)
+    if user_id:
+        where_clauses.append("h.user_id = ?")
+        params.append(user_id)
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    if group:
+        # Lade Header (chronologisch neueste zuerst)
+        headers = [dict(r) for r in c.execute(
+            "SELECT h.id, h.ts, h.user_id, h.payment_method_id, h.total, u.username as user, p.name as payment_method "
+            "FROM sale_headers h "
+            "LEFT JOIN users u ON u.id=h.user_id "
+            "LEFT JOIN payment_methods p ON p.id=h.payment_method_id "
+            f"{where_sql} "
+            "ORDER BY h.id DESC", params
+        ).fetchall()]
+        # Alle passenden lines in gespeicherter Reihenfolge (l.id) holen
+        lines_rows = [dict(r) for r in c.execute(
+            "SELECT l.sale_id, l.item_name, l.qty, l.price, l.total "
+            "FROM sale_lines l JOIN sale_headers h ON h.id=l.sale_id "
+            f"{where_sql.replace('h.','h.')} "  # reuse same filters (h.)
+            "ORDER BY l.id ASC", params
+        ).fetchall()]
+        c.close()
+        grouped = {}
+        for l in lines_rows:
+            sid = l['sale_id']
+            grouped.setdefault(sid, []).append(l)
+        purchases = []
+        for h in headers:
+            purchases.append({
+                "id": h["id"],
+                "ts": h["ts"],
+                "user": h.get("user"),
+                "payment_method": h.get("payment_method"),
+                "total": float(h["total"]),
+                "lines": grouped.get(h["id"], [])
+            })
+        return jsonify(ok=True, grouped=True, purchases=purchases, currency=CURRENCY)
+    else:
+        # Einzelne Posten: jede sale_lines Zeile mit Header-Infos
+        rows = [dict(r) for r in c.execute(
+            "SELECT l.sale_id as sale_id, h.ts, l.item_name, l.qty, l.price, l.total, "
+            "u.username as user, p.name as payment_method "
+            "FROM sale_lines l "
+            "JOIN sale_headers h ON h.id=l.sale_id "
+            "LEFT JOIN users u ON u.id=h.user_id "
+            "LEFT JOIN payment_methods p ON p.id=h.payment_method_id "
+            f"{where_sql} "
+            "ORDER BY h.id DESC, l.id ASC", params
+        ).fetchall()]
+        c.close()
+        for r in rows:
+            r['total'] = float(r['total'])
+        return jsonify(ok=True, grouped=False, rows=rows, currency=CURRENCY)
 
 
 if __name__ == "__main__":
