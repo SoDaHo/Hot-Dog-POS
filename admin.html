@@ -80,7 +80,7 @@
         <div style="display:flex; gap:12px; align-items:center">
             <h3 id="purchases-title" style="margin:0">Alle Käufe (gruppiert)</h3>
             <span class="badge">Total: <span id="purchases-total">0.00</span> <span id="purchases-currency">CHF</span></span>
-            <button class="btn-outline right" onclick="exportCSV()">CSV Export</button>
+            <button class="btn-outline right" onclick="exportPurchasesCSV()">CSV Export (gefiltert)</button>
         </div>
 
         <!-- Filterbereich -->
@@ -176,6 +176,11 @@
     });
 
     function exportCSV(){ window.location='/export.csv'; }
+    function exportPurchasesCSV(){ 
+        const params = getFilterParams();
+        const qs = new URLSearchParams(params).toString();
+        window.location='/export_purchases.csv' + (qs ? ('?'+qs) : '');
+    }
 
     // --- Filter Hilfsfunktionen ---
     function formatDayLabel(date){

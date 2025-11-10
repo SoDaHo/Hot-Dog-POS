@@ -306,6 +306,104 @@ def export_csv():
     return send_file(mem, mimetype="text/csv", as_attachment=True, download_name="verkauf.csv")
 
 
+@app.route("/export_purchases.csv")
+def export_purchases_csv():
+    c = conn()
+    
+    # Query-Parameter (gleiche wie bei /api/admin/purchases)
+    start = request.args.get('start')
+    end = request.args.get('end')
+    payment_method_id = request.args.get('payment_method_id')
+    user_id = request.args.get('user_id')
+    group = request.args.get('group', '1') in ('1', 'true', 'yes')
+    
+    # WHERE-Klausel bauen
+    where_clauses = []
+    params = []
+    if start:
+        where_clauses.append("date(h.ts) >= ?")
+        params.append(start)
+    if end:
+        where_clauses.append("date(h.ts) <= ?")
+        params.append(end)
+    if payment_method_id:
+        where_clauses.append("h.payment_method_id = ?")
+        params.append(payment_method_id)
+    if user_id:
+        where_clauses.append("h.user_id = ?")
+        params.append(user_id)
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=';')
+    
+    if group:
+        # Gruppierte Ansicht: eine Zeile pro Bestellung
+        w.writerow(["Bestellung-ID", "Zeit", "Artikel", "Zahlart", "Benutzer", "Gesamt"])
+        headers = c.execute(
+            "SELECT h.id, h.ts, h.total, u.username as user, p.name as payment_method "
+            "FROM sale_headers h "
+            "LEFT JOIN users u ON u.id=h.user_id "
+            "LEFT JOIN payment_methods p ON p.id=h.payment_method_id "
+            f"{where_sql} "
+            "ORDER BY h.id DESC", params
+        ).fetchall()
+        
+        lines_rows = c.execute(
+            "SELECT l.sale_id, l.item_name, l.qty "
+            "FROM sale_lines l JOIN sale_headers h ON h.id=l.sale_id "
+            f"{where_sql} "
+            "ORDER BY l.id ASC", params
+        ).fetchall()
+        
+        grouped = {}
+        for l in lines_rows:
+            sid = l['sale_id']
+            grouped.setdefault(sid, []).append(l)
+        
+        for h in headers:
+            items_list = grouped.get(h["id"], [])
+            items_str = ", ".join([f"{l['qty']}x {l['item_name']}" for l in items_list])
+            w.writerow([
+                h["id"],
+                h["ts"],
+                items_str,
+                h["payment_method"] or "",
+                h["user"] or "",
+                f"{h['total']:.2f}"
+            ])
+    else:
+        # Einzelposten: jede Zeile ist ein Item
+        w.writerow(["Bestellung-ID", "Zeit", "Artikel", "Menge", "Preis", "Zahlart", "Benutzer", "Gesamt"])
+        rows = c.execute(
+            "SELECT l.sale_id, h.ts, l.item_name, l.qty, l.price, l.total, "
+            "u.username as user, p.name as payment_method "
+            "FROM sale_lines l "
+            "JOIN sale_headers h ON h.id=l.sale_id "
+            "LEFT JOIN users u ON u.id=h.user_id "
+            "LEFT JOIN payment_methods p ON p.id=h.payment_method_id "
+            f"{where_sql} "
+            "ORDER BY h.id DESC, l.id ASC", params
+        ).fetchall()
+        
+        for r in rows:
+            w.writerow([
+                r["sale_id"],
+                r["ts"],
+                r["item_name"],
+                r["qty"],
+                f"{r['price']:.2f}",
+                r["payment_method"] or "",
+                r["user"] or "",
+                f"{r['total']:.2f}"
+            ])
+    
+    c.close()
+    mem = io.BytesIO(buf.getvalue().encode("utf-8"))
+    mem.seek(0)
+    return send_file(mem, mimetype="text/csv", as_attachment=True, download_name="kaeufe.csv")
+
+
 # ---------- Admin APIs ----------
 @app.route("/api/items")
 def api_items_list():
