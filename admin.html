@@ -29,6 +29,9 @@
         .sale-group-0 td{ background:#fafcff }
         .sale-group-1 td{ background:#fffdf6 }
         .sale-first td{ border-top:2px solid #e8e8e8 }
+        
+        /* Total-Zeile am Ende der Tabelle */
+        .total-row td{ border-top:2px solid #333; font-weight:700; font-size:16px; padding-top:14px }
     </style>
 </head>
 <body>
@@ -72,11 +75,11 @@
         </div>
     </section>
 
-    <!-- Käufe Tab (neu) -->
+    <!-- Käufe Tab -->
     <section id="tab-purchases" class="card" style="display:none">
         <div style="display:flex; gap:12px; align-items:center">
             <h3 id="purchases-title" style="margin:0">Alle Käufe (gruppiert)</h3>
-            <span class="muted" style="margin-left:8px">Angezeigt in der ursprünglichen Reihenfolge</span>
+            <span class="badge">Total: <span id="purchases-total">0.00</span> <span id="purchases-currency">CHF</span></span>
             <button class="btn-outline right" onclick="exportCSV()">CSV Export</button>
         </div>
 
@@ -106,7 +109,6 @@
 
         <div style="overflow:auto;margin-top:10px">
             <table id="purchases-table">
-                <!-- Behalte TR mit id, die JS bei jedem Laden überschreibt -->
                 <thead><tr id="purchases-head"><th>Zeit</th><th>Artikel</th><th>Zahlart</th><th>Benutzer</th><th>Gesamt</th></tr></thead>
                 <tbody></tbody>
             </table>
@@ -269,7 +271,7 @@
         });
     }
 
-    // ---- Load Purchases (neu) ----
+    // ---- Load Purchases (neu mit Total) ----
     async function loadPurchases(){
         const params = getFilterParams();
         const qs = new URLSearchParams(params).toString();
@@ -288,21 +290,24 @@
         }
 
         const tb = document.querySelector('#purchases-table tbody'); tb.innerHTML='';
+        let grandTotal = 0;
+
         if(data.grouped){
             (data.purchases||[]).forEach(p=>{
                 const tr=document.createElement('tr');
                 const itemsStr = (p.lines||[]).map(l=>`${l.qty}x ${l.item_name}`).join(', ');
                 tr.innerHTML = `<td>${p.ts}</td><td>${itemsStr}</td><td>${p.payment_method||''}</td><td>${p.user||''}</td><td>${p.total.toFixed(2)} ${data.currency}</td>`;
                 tb.appendChild(tr);
+                grandTotal += p.total;
             });
         } else {
             // Einzelposten: farblich pro Bestellung gruppieren
-            let lastSaleId = null, groupIdx = 1; // wird beim ersten Wechsel getoggelt
+            let lastSaleId = null, groupIdx = 1;
             (data.rows||[]).forEach((rw, i)=>{
                 const tr=document.createElement('tr');
                 let firstOfSale = false;
                 if(rw.sale_id !== lastSaleId){
-                    groupIdx = 1 - groupIdx; // 0/1 abwechseln
+                    groupIdx = 1 - groupIdx;
                     lastSaleId = rw.sale_id;
                     firstOfSale = true;
                 }
@@ -310,8 +315,20 @@
                 if(firstOfSale) tr.classList.add('sale-first');
                 tr.innerHTML = `<td>${rw.ts}</td><td>${rw.item_name}</td><td>${rw.qty}</td><td>${rw.payment_method||''}</td><td>${rw.user||''}</td><td>${rw.total.toFixed(2)} ${data.currency}</td>`;
                 tb.appendChild(tr);
+                grandTotal += rw.total;
             });
         }
+
+        // Badge oben aktualisieren
+        document.getElementById('purchases-total').textContent = grandTotal.toFixed(2);
+        document.getElementById('purchases-currency').textContent = data.currency;
+
+        // Total-Zeile am Ende der Tabelle hinzufügen
+        const totalRow = document.createElement('tr');
+        totalRow.className = 'total-row';
+        const colspan = data.grouped ? 4 : 5; // gruppiert: 4 Spalten, einzeln: 5 Spalten
+        totalRow.innerHTML = `<td colspan="${colspan}" style="text-align:right">Gesamt:</td><td><strong>${grandTotal.toFixed(2)} ${data.currency}</strong></td>`;
+        tb.appendChild(totalRow);
     }
 
     // ---- Items CRUD ----
@@ -370,7 +387,6 @@
     }
 
     // Filter-Events
-    // document.getElementById('filter-apply') entfernt
     document.getElementById('filter-clear').addEventListener('click', ()=>{
         document.getElementById('filter-last').value=''; document.getElementById('custom-range').style.display='none';
         document.getElementById('filter-start').value=''; document.getElementById('filter-end').value='';
