@@ -38,25 +38,13 @@
 
         /* Zahlungsbereich */
         .pay{ display:flex; flex-direction:column; gap:10px }
-        .pm-grid, .tile-grid{ display:grid; gap:12px; align-items:stretch }
-        .pm-grid button, .tile-grid .tile{ padding:14px; border-radius:12px; border:2px solid #ddd; background:#fff; cursor:pointer; height:56px; display:flex; align-items:center; justify-content:center; font-weight:600; width:100% }
+        .pm-grid{ display:grid; gap:12px; align-items:stretch }
+        .pm-grid button{ padding:14px; border-radius:12px; border:2px solid #ddd; background:#fff; cursor:pointer; height:56px; display:flex; align-items:center; justify-content:center; font-weight:600; width:100% }
         .pm-grid button.active{ border-color:#111; box-shadow:0 2px 8px rgba(0,0,0,.1) }
-        .tile.primary{ border-color:#111 }
-
-        .change-box{ display:flex; justify-content:flex-end }
-        .amount-label{ font-size:12px; color:#666; margin-bottom:4px }
-        .change-value{ font-size:24px; font-weight:800 }
-        .neg{ color:#b00020 }
 
         /* Toast */
         #toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#111; color:#fff; padding:10px 18px; border-radius:999px; opacity:0; transition:opacity .25s ease; z-index:1000 }
         #toast.show { opacity:1 }
-
-        /* Modal */
-        .modal{ position:fixed; inset:0; background:rgba(0,0,0,.4); display:none; align-items:center; justify-content:center; padding:16px; z-index:999 }
-        .modal .sheet{ background:#fff; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.25); padding:16px; max-width:360px; width:100% }
-        .keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:10px }
-        .keypad button{ padding:16px; border:none; border-radius:12px; background:#f6f6f6; font-size:18px; cursor:pointer }
 
         /* Mobile kompakt */
         @media (max-width: 600px){
@@ -70,7 +58,6 @@
             .item.expanded .add-quick{ display:none }
 
             .pm-grid{ grid-template-columns: repeat(3, 1fr) !important; }
-            #cashTiles{ grid-template-columns: repeat(4, 1fr) !important; }
         }
         .item.compact .price{ display:none }
         .item.compact .qty{ display:none }
@@ -81,12 +68,10 @@
         .item.expanded .add-quick{ display:none }
 
         .pm-grid{ grid-template-columns: repeat(3, 1fr) !important; }
-        #cashTiles{ grid-template-columns: repeat(4, 1fr) !important; }
         }
 
-        /* Erzwinge 3 Zahlarten pro Zeile (auch Desktop) und 4 Cash-Tiles */
+        /* Erzwinge 3 Zahlarten pro Zeile (auch Desktop) */
         .pm-grid{ grid-template-columns: repeat(3, 1fr); }
-        #cashTiles{ grid-template-columns: repeat(4, 1fr); }
 
         /* Gleichmäßige Abstände zwischen Summe und Zahlungsbereich */
         .line{ margin-bottom:12px; }
@@ -124,22 +109,6 @@
         </div>
 
         <div>
-            <div class="small">Betrag & Schnellbetrag</div>
-            <div class="tile-grid" id="cashTiles">
-                <button id="cashBtn" class="tile primary"><strong><span id="cashText"></span> {{currency}}</strong></button>
-                <button class="tile quick" data-val="10">10 {{currency}}</button>
-                <button class="tile quick" data-val="50">50 {{currency}}</button>
-                <button class="tile quick" data-val="100">100 {{currency}}</button>
-            </div>
-            <div class="change-box" style="margin-top:6px">
-                <div>
-                    <div class="amount-label" id="changeLabel">Rückgeld</div>
-                    <div class="change-value" id="changeWrap"><span id="change">0.00</span> {{currency}}</div>
-                </div>
-            </div>
-        </div>
-
-        <div>
             <button id="pay" class="btn" style="font-size:20px;width:100%">Kassieren</button>
         </div>
     </div>
@@ -147,24 +116,7 @@
 
 <div id="toast"></div>
 
-<div id="modal" class="modal">
-    <div class="sheet">
-        <div style="text-align:center;font-weight:700">Betrag eingeben</div>
-        <div style="display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px">
-            <input id="modalInput" type="text" inputmode="none" readonly style="font-size:22px;padding:8px 12px;border:1px solid #ddd;border-radius:12px;width:180px;text-align:center" />
-        </div>
-        <div class="keypad">
-            <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
-            <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
-            <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
-            <button data-k="b">⌫</button><button data-k="0">0</button><button data-k="," >,</button>
-        </div>
-        <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
-            <button id="modalOk" class="btn">OK</button>
-            <button id="modalCancel" class="btn" style="background:#666">Abbrechen</button>
-        </div>
-    </div>
-</div><script>
+<script>
     // PWA rückgängig machen: vorhandene Service Worker entfernen & Cache leeren
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then((regs)=>regs.forEach(r=>r.unregister()));
@@ -173,18 +125,15 @@
         caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
     }
 
-    // ==== Kassen-App Logik (wiederhergestellt) ====
+    // ==== Kassen-App Logik (vereinfacht ohne Cash-Flow) ====
     const CURRENCY = "{{currency}}";
     const items = {{ items | tojson }};             // [{id,name,price}]
     const payMethods = {{ pay_methods | tojson | default('[]') }}; // [{id,name,protected}]
 
     const cart = {}; let activePM = payMethods.length ? payMethods[0].id : null;
-    let cashAmount = 0.00;
     const isMobile = window.matchMedia('(max-width: 600px)');
 
     function notify(msg){ let t=document.getElementById('toast'); if(!t){ t=document.createElement('div'); t.id='toast'; document.body.appendChild(t);} t.textContent=msg; t.classList.add('show'); setTimeout(()=> t.classList.remove('show'), 1400); }
-    function getIsCash(pm){ return (pm.protected===true) || (pm.name && pm.name.toLowerCase()==='bar'); }
-    function activeIsCash(){ const pm=payMethods.find(p=>p.id===activePM); return pm ? getIsCash(pm) : false; }
 
     // Items
     const expanded = new Map();
@@ -200,33 +149,34 @@
     document.addEventListener('click',(e)=>{ const b=e.target && e.target.closest ? e.target.closest('[data-badge]') : null; if(!b) return; const id=parseInt(b.getAttribute('data-badge')); cart[id]=0; updateSum(); updateItemQtyBadges(id); e.stopPropagation(); });
 
     // Payment methods
-    function renderPM(){ const el=document.getElementById('pm'); if(!el) return; el.innerHTML=''; (payMethods||[]).forEach(pm=>{ const b=document.createElement('button'); b.textContent=pm.name; if(pm.id===activePM) b.classList.add('active'); b.onclick=()=>{ activePM=pm.id; renderPM(); onPaymentChange(); }; el.appendChild(b); }); }
+    function renderPM(){ const el=document.getElementById('pm'); if(!el) return; el.innerHTML=''; (payMethods||[]).forEach(pm=>{ const b=document.createElement('button'); b.textContent=pm.name; if(pm.id===activePM) b.classList.add('active'); b.onclick=()=>{ activePM=pm.id; renderPM(); }; el.appendChild(b); }); }
 
-    // Cash tiles
-    function refreshCashUI(){ const t=document.getElementById('cashText'); if(!t) return; t.textContent = (cashAmount && cashAmount>0) ? cashAmount.toFixed(2) : ''; }
-    function onPaymentChange(){ const isCash=activeIsCash(); const cashBtn=document.getElementById('cashBtn'); const qBtns=document.querySelectorAll('#cashTiles .quick'); if(isCash){ cashBtn && cashBtn.classList.add('primary'); cashAmount=0; } else { cashBtn && cashBtn.classList.remove('primary'); cashAmount=cartTotal(); } qBtns.forEach(b=> b.disabled=!isCash); refreshCashUI(); updateSum(); }
-
-    // Keypad modal
-    const modal=document.getElementById('modal'); const modalInput=document.getElementById('modalInput');
-    function openKeypad(startVal){ if(!modal||!modalInput) return; modal.style.display='flex'; modalInput.value=startVal||''; }
-    function closeKeypad(){ if(!modal) return; modal.style.display='none'; }
-    if(document.getElementById('modalCancel')) document.getElementById('modalCancel').onclick=closeKeypad;
-    document.querySelectorAll('.keypad button').forEach(b=> b.onclick=()=>{ const k=b.dataset.k; if(k==='b'){ modalInput.value=modalInput.value.slice(0,-1); return;} modalInput.value+=k; });
-    if(document.getElementById('modalOk')) document.getElementById('modalOk').onclick=()=>{ const v=parseFloat(modalInput.value.replace(',','.')); if(!isNaN(v)){ cashAmount=v; refreshCashUI(); updateSum(); closeKeypad(); } else notify('Ungültiger Betrag'); };
-
-    const cashBtnEl=document.getElementById('cashBtn'); if(cashBtnEl) cashBtnEl.addEventListener('click', ()=>{ if(!activeIsCash()) return; openKeypad((cashAmount && cashAmount>0) ? cashAmount.toFixed(2) : ''); });
-    document.querySelectorAll('#cashTiles .quick').forEach(b=> b.addEventListener('click',()=>{ if(!activeIsCash()) return; cashAmount=parseFloat(b.dataset.val); refreshCashUI(); updateSum(); }));
-
-    // Sum/Change
+    // Sum
     function cartTotal(){ let s=0; for(const it of (items||[])){ if(cart[it.id]) s+=cart[it.id]*it.price; } return s; }
-    function updateSum(){ const sumEl=document.getElementById('sum'); const s=cartTotal(); if(sumEl) sumEl.textContent=s.toFixed(2); if(!activeIsCash()){ cashAmount=s; refreshCashUI(); } const diff=cashAmount - s; const changeEl=document.getElementById('change'); const labelEl=document.getElementById('changeLabel'); const wrap=document.getElementById('changeWrap'); if(labelEl&&changeEl&&wrap){ if(diff>=0){ labelEl.textContent='Rückgeld'; changeEl.textContent=diff.toFixed(2); wrap.classList.remove('neg'); } else { labelEl.textContent='Fehlbetrag'; changeEl.textContent=Math.abs(diff).toFixed(2); wrap.classList.add('neg'); } } }
+    function updateSum(){ const sumEl=document.getElementById('sum'); const s=cartTotal(); if(sumEl) sumEl.textContent=s.toFixed(2); }
 
     // Controls
-    const clearBtn=document.getElementById('clear'); if(clearBtn) clearBtn.onclick=()=>{ for(const k in cart) delete cart[k]; cashAmount=0; refreshCashUI(); renderItems(); updateSum(); notify('Warenkorb geleert'); };
-    const payBtn=document.getElementById('pay'); if(payBtn) payBtn.onclick=async()=>{ const lines=Object.entries(cart).filter(([id,q])=>q>0).map(([id,q])=>({item_id:parseInt(id),qty:q})); if(!lines.length){ notify('Bitte Artikel wählen.'); return;} if(!activePM){ notify('Bitte Zahlart wählen.'); return;} let note=''; if(activeIsCash()){ const total=cartTotal(); if(cashAmount<total){ notify('Fehlbetrag – Zahlung unvollständig'); return;} const change=cashAmount-total; note=`Verkauf gespeichert – Rückgeld ${change.toFixed(2)} ${CURRENCY}`; } else { const pm=payMethods.find(p=>p.id===activePM); note=`Verkauf gespeichert – Zahlart: ${pm?pm.name:'Digital'}`; } const res=await fetch('/sale',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines,payment_method_id:activePM})}); const data=await res.json(); if(data.ok){ notify(note); for(const k in cart) delete cart[k]; cashAmount=0; refreshCashUI(); renderItems(); updateSum(); } else { notify('Fehler: '+(data.msg||'Unbekannt')); } };
+    const clearBtn=document.getElementById('clear'); if(clearBtn) clearBtn.onclick=()=>{ for(const k in cart) delete cart[k]; renderItems(); updateSum(); notify('Warenkorb geleert'); };
+    const payBtn=document.getElementById('pay'); if(payBtn) payBtn.onclick=async()=>{ 
+        const lines=Object.entries(cart).filter(([id,q])=>q>0).map(([id,q])=>({item_id:parseInt(id),qty:q})); 
+        if(!lines.length){ notify('Bitte Artikel wählen.'); return;} 
+        if(!activePM){ notify('Bitte Zahlart wählen.'); return;} 
+        
+        const pm=payMethods.find(p=>p.id===activePM);
+        const res=await fetch('/sale',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines,payment_method_id:activePM})}); 
+        const data=await res.json(); 
+        if(data.ok){ 
+            notify(`Verkauf gespeichert – Zahlart: ${pm?pm.name:'Unbekannt'}`); 
+            for(const k in cart) delete cart[k]; 
+            renderItems(); 
+            updateSum(); 
+        } else { 
+            notify('Fehler: '+(data.msg||'Unbekannt')); 
+        } 
+    };
 
     // init
-    renderItems(); renderPM(); onPaymentChange(); updateSum();
+    renderItems(); renderPM(); updateSum();
 </script>
 </body>
 </html>
