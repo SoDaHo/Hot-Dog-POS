@@ -26,6 +26,11 @@ Kurz: Touch‑freundliche Kasse, Benutzer/PIN, Artikelverwaltung, Zahlarten, Adm
    python POS.py
    ```
 5. Öffnen: http://localhost:8000
+6. Einloggen
+   ```bash
+   Admin Default PIN: 1234
+   Kasse Default PIN: 0000
+   ```
 
 ## Docker
 Dockerfile (minimal):
