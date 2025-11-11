@@ -41,7 +41,7 @@
         .pay{ display:flex; flex-direction:column; gap:10px }
         .pm-grid{ display:grid; gap:12px; align-items:stretch }
         .pm-grid button{ padding:14px; border-radius:12px; border:2px solid #ddd; background:#fff; cursor:pointer; height:56px; display:flex; align-items:center; justify-content:center; font-weight:600; width:100%; color:#111; transition: all 0.2s ease }
-        .pm-grid button.active{ background:#111; color:#fff; border-color:#111; box-shadow:0 2px 8px rgba(0,0,0,.2) }
+        .pm-grid button.active{ border-color:#111; box-shadow:0 2px 8px rgba(0,0,0,.1) }
 
         /* Toast / Notify */
         #toast { 
@@ -217,6 +217,9 @@
         for(const k in cart) delete cart[k]; 
         renderItems(); 
         updateSum(); 
+        // Zahlart zurücksetzen auf Bar (erste Zahlart)
+        activePM = payMethods.length ? payMethods[0].id : null;
+        renderPM();
         notify('Warenkorb geleert', 'info'); 
     };
     
