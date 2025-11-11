@@ -305,6 +305,56 @@ def export_csv():
     mem = io.BytesIO(buf.getvalue().encode("utf-8")); mem.seek(0)
     return send_file(mem, mimetype="text/csv", as_attachment=True, download_name="verkauf.csv")
 
+@app.route("/export_today.csv")
+def export_today_csv():
+    c = conn()
+    
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=';')
+    
+    w.writerow(["Bestellung-ID", "Zeit", "Artikel", "Zahlart", "Benutzer", "Gesamt"])
+    
+    # GLEICHE Logik wie api_admin_summary - date('now','localtime')
+    headers = c.execute(
+        "SELECT h.id, h.ts, h.total, u.username as user, p.name as payment_method "
+        "FROM sale_headers h "
+        "LEFT JOIN users u ON u.id=h.user_id "
+        "LEFT JOIN payment_methods p ON p.id=h.payment_method_id "
+        "WHERE date(h.ts) = date('now','localtime') "
+        "ORDER BY h.id DESC"
+    ).fetchall()
+    
+    lines_rows = c.execute(
+        "SELECT l.sale_id, l.item_name, l.qty "
+        "FROM sale_lines l JOIN sale_headers h ON h.id=l.sale_id "
+        "WHERE date(h.ts) = date('now','localtime') "
+        "ORDER BY l.id ASC"
+    ).fetchall()
+    
+    grouped = {}
+    for l in lines_rows:
+        sid = l['sale_id']
+        grouped.setdefault(sid, []).append(l)
+    
+    # Dateiname
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    for h in headers:
+        items_list = grouped.get(h["id"], [])
+        items_str = ", ".join([f"{l['qty']}x {l['item_name']}" for l in items_list])
+        w.writerow([
+            h["id"],
+            h["ts"],
+            items_str,
+            h["payment_method"] or "",
+            h["user"] or "",
+            f"{h['total']:.2f}"
+        ])
+    
+    c.close()
+    mem = io.BytesIO(buf.getvalue().encode("utf-8"))
+    mem.seek(0)
+    return send_file(mem, mimetype="text/csv", as_attachment=True, download_name=f"tagesbericht_{today_str}.csv")
 
 @app.route("/export_purchases.csv")
 def export_purchases_csv():

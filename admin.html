@@ -56,7 +56,7 @@
             <!-- Neu: Badges direkt neben dem Datum -->
             <span class="badge">Summe: <span id="sum-total">0.00</span> <span id="sum-currency">CHF</span></span>
             <span class="badge">Transaktionen: <span id="sum-count">0</span></span>
-            <button class="btn-outline right" onclick="exportCSV()">CSV Export</button>
+            <button class="btn-outline right" onclick="exportTodayCSV()">CSV Tagesbericht</button>
         </div>
         <!-- Entfernt: separater Badge-Block unter der Überschrift -->
         <div style="overflow:auto;margin-top:10px">
@@ -119,7 +119,6 @@
     <section id="tab-items" class="card" style="display:none">
         <div style="display:flex;gap:10px;align-items:center">
             <h3 style="margin:0">Artikel verwalten</h3>
-            <span class="muted">(in DB gespeichert)</span>
             <button class="btn right" onclick="addItemRow()">Neuen Artikel</button>
         </div>
         <div style="overflow:auto;margin-top:10px">
@@ -175,7 +174,10 @@
         });
     });
 
-    function exportCSV(){ window.location='/export.csv'; }
+    function exportTodayCSV(){ 
+    window.location='/export_today.csv';
+}
+    
     function exportPurchasesCSV(){ 
         const params = getFilterParams();
         const qs = new URLSearchParams(params).toString();
