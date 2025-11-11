@@ -5,6 +5,7 @@ services:
     environment:
       - POS_SECRET=${POS_SECRET}
       - POS_DB=/app/data/sales.db
+      - TZ=Europe/Zurich
     volumes:
       - ./data:/app/data:rw
     ports:
