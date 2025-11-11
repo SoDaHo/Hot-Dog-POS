@@ -43,9 +43,18 @@
         .pm-grid button{ padding:14px; border-radius:12px; border:2px solid #ddd; background:#fff; cursor:pointer; height:56px; display:flex; align-items:center; justify-content:center; font-weight:600; width:100% }
         .pm-grid button.active{ border-color:#111; box-shadow:0 2px 8px rgba(0,0,0,.1) }
 
-        /* Toast */
-        #toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#111; color:#fff; padding:10px 18px; border-radius:999px; opacity:0; transition:opacity .25s ease; z-index:1000 }
+        /* Toast / Notify */
+        #toast { 
+            position:fixed; bottom:24px; left:50%; transform:translateX(-50%); 
+            background:#111; color:#fff; padding:12px 20px; border-radius:12px; 
+            opacity:0; transition:opacity .25s ease; z-index:1000;
+            max-width:90%; box-shadow:0 4px 12px rgba(0,0,0,.3);
+            font-weight:500; cursor:pointer;
+        }
         #toast.show { opacity:1 }
+        #toast.success { background:#0a7e3e; }
+        #toast.error { background:#c41e3a; }
+        #toast.warning { background:#d97706; }
 
         /* Spinner */
         .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; margin-right:8px }
@@ -138,7 +147,36 @@
     const cart = {}; let activePM = payMethods.length ? payMethods[0].id : null;
     const isMobile = window.matchMedia('(max-width: 600px)');
 
-    function notify(msg){ let t=document.getElementById('toast'); if(!t){ t=document.createElement('div'); t.id='toast'; document.body.appendChild(t);} t.textContent=msg; t.classList.add('show'); setTimeout(()=> t.classList.remove('show'), 1400); }
+    // Verbessertes Notify-System
+    let notifyTimeout = null;
+    function notify(msg, type = 'info'){ 
+        let t = document.getElementById('toast'); 
+        if(!t){ 
+            t = document.createElement('div'); 
+            t.id = 'toast'; 
+            document.body.appendChild(t);
+            // Klick zum Schließen (wichtig bei Fehlern)
+            t.addEventListener('click', () => {
+                t.classList.remove('show');
+                if(notifyTimeout) clearTimeout(notifyTimeout);
+            });
+        }
+        
+        // Clear previous timeout
+        if(notifyTimeout) clearTimeout(notifyTimeout);
+        
+        // Setze Nachricht und Stil
+        t.textContent = msg;
+        t.className = 'show ' + type; // 'success', 'error', 'warning', or 'info'
+        
+        // Auto-hide nur bei success/info, error bleibt stehen
+        if(type === 'success' || type === 'info') {
+            notifyTimeout = setTimeout(() => t.classList.remove('show'), 2500);
+        } else if(type === 'warning') {
+            notifyTimeout = setTimeout(() => t.classList.remove('show'), 4000);
+        }
+        // Bei 'error' kein setTimeout - bleibt stehen bis Klick
+    }
 
     // Items
     const expanded = new Map();
@@ -161,13 +199,25 @@
     function updateSum(){ const sumEl=document.getElementById('sum'); const s=cartTotal(); if(sumEl) sumEl.textContent=s.toFixed(2); }
 
     // Controls
-    const clearBtn=document.getElementById('clear'); if(clearBtn) clearBtn.onclick=()=>{ for(const k in cart) delete cart[k]; renderItems(); updateSum(); notify('Warenkorb geleert'); };
+    const clearBtn=document.getElementById('clear'); 
+    if(clearBtn) clearBtn.onclick=()=>{ 
+        for(const k in cart) delete cart[k]; 
+        renderItems(); 
+        updateSum(); 
+        notify('Warenkorb geleert', 'info'); 
+    };
     
     const payBtn=document.getElementById('pay'); 
     if(payBtn) payBtn.onclick=async()=>{ 
         const lines=Object.entries(cart).filter(([id,q])=>q>0).map(([id,q])=>({item_id:parseInt(id),qty:q})); 
-        if(!lines.length){ notify('Bitte Artikel wählen.'); return;} 
-        if(!activePM){ notify('Bitte Zahlart wählen.'); return;} 
+        if(!lines.length){ 
+            notify('Bitte Artikel wählen', 'warning'); 
+            return;
+        } 
+        if(!activePM){ 
+            notify('Bitte Zahlart wählen', 'warning'); 
+            return;
+        } 
         
         // Button disablen + Ladeindikator
         payBtn.disabled = true;
@@ -175,19 +225,29 @@
         payBtn.innerHTML = '<span class="spinner"></span>Wird gespeichert...';
         
         try {
-            const pm=payMethods.find(p=>p.id===activePM);
-            const res=await fetch('/sale',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines,payment_method_id:activePM})}); 
-            const data=await res.json(); 
+            const pm = payMethods.find(p=>p.id===activePM);
+            const res = await fetch('/sale', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({lines, payment_method_id: activePM})
+            }); 
+            
+            const data = await res.json(); 
+            
             if(data.ok){ 
-                notify(`Verkauf gespeichert – Zahlart: ${pm?pm.name:'Unbekannt'}`); 
+                notify(`✓ Verkauf gespeichert – ${pm?pm.name:'Unbekannt'}`, 'success'); 
                 for(const k in cart) delete cart[k]; 
                 renderItems(); 
                 updateSum(); 
             } else { 
-                notify('Fehler: '+(data.msg||'Unbekannt')); 
+                notify('Fehler: ' + (data.msg || 'Unbekannt'), 'error'); 
             }
+        } catch(error) {
+            // Netzwerkfehler, Server down, Timeout, etc.
+            notify('Verbindungsfehler – Bitte nochmal versuchen', 'error');
+            console.error('Verkauf-Fehler:', error);
         } finally {
-            // Button wieder enablen
+            // Button immer wieder enablen
             payBtn.disabled = false;
             payBtn.innerHTML = originalText;
         }
