@@ -40,8 +40,8 @@
         /* Zahlungsbereich */
         .pay{ display:flex; flex-direction:column; gap:10px }
         .pm-grid{ display:grid; gap:12px; align-items:stretch }
-        .pm-grid button{ padding:14px; border-radius:12px; border:2px solid #ddd; background:#fff; cursor:pointer; height:56px; display:flex; align-items:center; justify-content:center; font-weight:600; width:100% }
-        .pm-grid button.active{ border-color:#111; box-shadow:0 2px 8px rgba(0,0,0,.1) }
+        .pm-grid button{ padding:14px; border-radius:12px; border:2px solid #ddd; background:#fff; cursor:pointer; height:56px; display:flex; align-items:center; justify-content:center; font-weight:600; width:100%; color:#111; transition: all 0.2s ease }
+        .pm-grid button.active{ background:#111; color:#fff; border-color:#111; box-shadow:0 2px 8px rgba(0,0,0,.2) }
 
         /* Toast / Notify */
         #toast { 
@@ -192,7 +192,20 @@
     document.addEventListener('click',(e)=>{ const b=e.target && e.target.closest ? e.target.closest('[data-badge]') : null; if(!b) return; const id=parseInt(b.getAttribute('data-badge')); cart[id]=0; updateSum(); updateItemQtyBadges(id); e.stopPropagation(); });
 
     // Payment methods
-    function renderPM(){ const el=document.getElementById('pm'); if(!el) return; el.innerHTML=''; (payMethods||[]).forEach(pm=>{ const b=document.createElement('button'); b.textContent=pm.name; if(pm.id===activePM) b.classList.add('active'); b.onclick=()=>{ activePM=pm.id; renderPM(); }; el.appendChild(b); }); }
+    function renderPM(){ 
+        const el=document.getElementById('pm'); 
+        if(!el) return; 
+        el.innerHTML=''; 
+        (payMethods||[]).forEach(pm=>{ 
+            const b=document.createElement('button'); 
+            const isActive = pm.id===activePM;
+            // Checkmark hinzufügen wenn aktiv
+            b.textContent = isActive ? `✓ ${pm.name}` : pm.name;
+            if(isActive) b.classList.add('active'); 
+            b.onclick=()=>{ activePM=pm.id; renderPM(); }; 
+            el.appendChild(b); 
+        }); 
+    }
 
     // Sum
     function cartTotal(){ let s=0; for(const it of (items||[])){ if(cart[it.id]) s+=cart[it.id]*it.price; } return s; }
@@ -236,9 +249,13 @@
             
             if(data.ok){ 
                 notify(`✓ Verkauf gespeichert – ${pm?pm.name:'Unbekannt'}`, 'success'); 
+                // Warenkorb leeren
                 for(const k in cart) delete cart[k]; 
                 renderItems(); 
                 updateSum(); 
+                // Zahlart auf Bar (erste Zahlart) zurücksetzen
+                activePM = payMethods.length ? payMethods[0].id : null;
+                renderPM();
             } else { 
                 notify('Fehler: ' + (data.msg || 'Unbekannt'), 'error'); 
             }
