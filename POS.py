@@ -798,6 +798,34 @@ def api_admin_purchases():
             r['total'] = float(r['total'])
         return jsonify(ok=True, grouped=False, rows=rows, currency=CURRENCY)
 
+@app.route("/api/admin/delete_sale/<int:sale_id>", methods=["DELETE"])
+def api_delete_sale(sale_id):
+    user = current_user()
+    if not user or not user.get("is_admin"):
+        return jsonify(ok=False, msg="Nicht authorisiert"), 403
+    
+    c = conn()
+    cur = c.cursor()
+    
+    # Timestamp für Kompatibilitätstabelle
+    ts_row = cur.execute("SELECT ts FROM sale_headers WHERE id=?", (sale_id,)).fetchone()
+    if not ts_row:
+        c.close()
+        return jsonify(ok=False, msg="Bestellung nicht gefunden"), 404
+    
+    ts = ts_row[0]
+    
+    # Lösche aus normalisierten Tabellen
+    cur.execute("DELETE FROM sale_lines WHERE sale_id=?", (sale_id,))
+    cur.execute("DELETE FROM sale_headers WHERE id=?", (sale_id,))
+    
+    # Lösche aus alter Kompatibilitätstabelle
+    cur.execute("DELETE FROM sales WHERE ts=?", (ts,))
+    
+    c.commit()
+    c.close()
+    
+    return jsonify(ok=True)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)

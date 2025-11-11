@@ -279,6 +279,7 @@
     }
 
     // ---- Load Purchases (neu mit Total) ----
+ // ---- Load Purchases (neu mit Total + Storno) ----
     async function loadPurchases(){
         const params = getFilterParams();
         const qs = new URLSearchParams(params).toString();
@@ -291,9 +292,9 @@
 
         const head = document.getElementById('purchases-head');
         if(data.grouped){
-            head.innerHTML = '<th>Zeit</th><th>Artikel</th><th>Zahlart</th><th>Benutzer</th><th>Gesamt</th>';
+            head.innerHTML = '<th>Zeit</th><th>Artikel</th><th>Zahlart</th><th>Benutzer</th><th>Gesamt</th><th>Aktion</th>';
         } else {
-            head.innerHTML = '<th>Zeit</th><th>Artikel</th><th>Menge</th><th>Zahlart</th><th>Benutzer</th><th>Gesamt</th>';
+            head.innerHTML = '<th>Zeit</th><th>Artikel</th><th>Menge</th><th>Zahlart</th><th>Benutzer</th><th>Gesamt</th><th>Aktion</th>';
         }
 
         const tb = document.querySelector('#purchases-table tbody'); tb.innerHTML='';
@@ -303,7 +304,7 @@
             (data.purchases||[]).forEach(p=>{
                 const tr=document.createElement('tr');
                 const itemsStr = (p.lines||[]).map(l=>`${l.qty}x ${l.item_name}`).join(', ');
-                tr.innerHTML = `<td>${p.ts}</td><td>${itemsStr}</td><td>${p.payment_method||''}</td><td>${p.user||''}</td><td>${p.total.toFixed(2)} ${data.currency}</td>`;
+                tr.innerHTML = `<td>${p.ts}</td><td>${itemsStr}</td><td>${p.payment_method||''}</td><td>${p.user||''}</td><td>${p.total.toFixed(2)} ${data.currency}</td><td><button class="btn-outline" style="color:#b00020;border-color:#b00020" onclick="deleteSale(${p.id})">✕ Storno</button></td>`;
                 tb.appendChild(tr);
                 grandTotal += p.total;
             });
@@ -320,7 +321,9 @@
                 }
                 tr.classList.add(`sale-group-${groupIdx}`);
                 if(firstOfSale) tr.classList.add('sale-first');
-                tr.innerHTML = `<td>${rw.ts}</td><td>${rw.item_name}</td><td>${rw.qty}</td><td>${rw.payment_method||''}</td><td>${rw.user||''}</td><td>${rw.total.toFixed(2)} ${data.currency}</td>`;
+                // Storno-Button nur in erster Zeile einer Bestellung
+                const actionBtn = firstOfSale ? `<button class="btn-outline" style="color:#b00020;border-color:#b00020" onclick="deleteSale(${rw.sale_id})">✕ Storno</button>` : '';
+                tr.innerHTML = `<td>${rw.ts}</td><td>${rw.item_name}</td><td>${rw.qty}</td><td>${rw.payment_method||''}</td><td>${rw.user||''}</td><td>${rw.total.toFixed(2)} ${data.currency}</td><td>${actionBtn}</td>`;
                 tb.appendChild(tr);
                 grandTotal += rw.total;
             });
@@ -333,9 +336,30 @@
         // Total-Zeile am Ende der Tabelle hinzufügen
         const totalRow = document.createElement('tr');
         totalRow.className = 'total-row';
-        const colspan = data.grouped ? 4 : 5; // gruppiert: 4 Spalten, einzeln: 5 Spalten
+        const colspan = data.grouped ? 5 : 6; // +1 wegen Aktions-Spalte
         totalRow.innerHTML = `<td colspan="${colspan}" style="text-align:right">Gesamt:</td><td><strong>${grandTotal.toFixed(2)} ${data.currency}</strong></td>`;
         tb.appendChild(totalRow);
+    }
+
+    // Neue Funktion: Bestellung stornieren
+    async function deleteSale(saleId){
+        if(!confirm('Bestellung wirklich stornieren? Diese Aktion kann nicht rückgängig gemacht werden.')) return;
+        
+        const r = await fetch(`/api/admin/delete_sale/${saleId}`, {method:'DELETE'});
+        const d = await r.json();
+        
+        if(d.ok){
+            notify('Bestellung storniert.');
+            loadPurchases(); // Tabelle neu laden
+            loadSales(); // Übersicht auch aktualisieren
+        } else {
+            alert('Fehler beim Stornieren: ' + (d.msg || 'Unbekannt'));
+        }
+    }
+
+    // Notify Funktion hinzufügen (falls noch nicht vorhanden)
+    function notify(msg){
+        alert(msg); // Simple Version - kannst du später mit Toast ersetzen
     }
 
     // ---- Items CRUD ----

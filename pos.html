@@ -35,6 +35,7 @@
         .total { font-size:28px; font-weight:800 }
         .small { font-size:12px; color:#666 }
         .btn { display:inline-block; border:none; border-radius:12px; padding:12px 16px; background:#111; color:#fff; cursor:pointer }
+        .btn:disabled { background:#999; cursor:not-allowed; opacity:0.6 }
 
         /* Zahlungsbereich */
         .pay{ display:flex; flex-direction:column; gap:10px }
@@ -45,6 +46,10 @@
         /* Toast */
         #toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#111; color:#fff; padding:10px 18px; border-radius:999px; opacity:0; transition:opacity .25s ease; z-index:1000 }
         #toast.show { opacity:1 }
+
+        /* Spinner */
+        .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; margin-right:8px }
+        @keyframes spin { to { transform:rotate(360deg) } }
 
         /* Mobile kompakt */
         @media (max-width: 600px){
@@ -157,22 +162,35 @@
 
     // Controls
     const clearBtn=document.getElementById('clear'); if(clearBtn) clearBtn.onclick=()=>{ for(const k in cart) delete cart[k]; renderItems(); updateSum(); notify('Warenkorb geleert'); };
-    const payBtn=document.getElementById('pay'); if(payBtn) payBtn.onclick=async()=>{ 
+    
+    const payBtn=document.getElementById('pay'); 
+    if(payBtn) payBtn.onclick=async()=>{ 
         const lines=Object.entries(cart).filter(([id,q])=>q>0).map(([id,q])=>({item_id:parseInt(id),qty:q})); 
         if(!lines.length){ notify('Bitte Artikel wählen.'); return;} 
         if(!activePM){ notify('Bitte Zahlart wählen.'); return;} 
         
-        const pm=payMethods.find(p=>p.id===activePM);
-        const res=await fetch('/sale',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines,payment_method_id:activePM})}); 
-        const data=await res.json(); 
-        if(data.ok){ 
-            notify(`Verkauf gespeichert – Zahlart: ${pm?pm.name:'Unbekannt'}`); 
-            for(const k in cart) delete cart[k]; 
-            renderItems(); 
-            updateSum(); 
-        } else { 
-            notify('Fehler: '+(data.msg||'Unbekannt')); 
-        } 
+        // Button disablen + Ladeindikator
+        payBtn.disabled = true;
+        const originalText = payBtn.innerHTML;
+        payBtn.innerHTML = '<span class="spinner"></span>Wird gespeichert...';
+        
+        try {
+            const pm=payMethods.find(p=>p.id===activePM);
+            const res=await fetch('/sale',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines,payment_method_id:activePM})}); 
+            const data=await res.json(); 
+            if(data.ok){ 
+                notify(`Verkauf gespeichert – Zahlart: ${pm?pm.name:'Unbekannt'}`); 
+                for(const k in cart) delete cart[k]; 
+                renderItems(); 
+                updateSum(); 
+            } else { 
+                notify('Fehler: '+(data.msg||'Unbekannt')); 
+            }
+        } finally {
+            // Button wieder enablen
+            payBtn.disabled = false;
+            payBtn.innerHTML = originalText;
+        }
     };
 
     // init
