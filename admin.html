@@ -175,8 +175,8 @@
     });
 
     function exportTodayCSV(){ 
-    window.location='/export_today.csv';
-}
+        window.location='/export_today.csv';
+    }
     
     function exportPurchasesCSV(){ 
         const params = getFilterParams();
@@ -278,8 +278,7 @@
         });
     }
 
-    // ---- Load Purchases (neu mit Total) ----
- // ---- Load Purchases (neu mit Total + Storno) ----
+    // ---- Load Purchases (neu mit Total + Storno) ----
     async function loadPurchases(){
         const params = getFilterParams();
         const qs = new URLSearchParams(params).toString();
@@ -349,17 +348,12 @@
         const d = await r.json();
         
         if(d.ok){
-            notify('Bestellung storniert.');
+            alert('Bestellung storniert.');
             loadPurchases(); // Tabelle neu laden
             loadSales(); // Übersicht auch aktualisieren
         } else {
             alert('Fehler beim Stornieren: ' + (d.msg || 'Unbekannt'));
         }
-    }
-
-    // Notify Funktion hinzufügen (falls noch nicht vorhanden)
-    function notify(msg){
-        alert(msg); // Simple Version - kannst du später mit Toast ersetzen
     }
 
     // ---- Items CRUD ----
@@ -397,7 +391,22 @@
     function renderUsers(){ const tb=document.querySelector('#users-table tbody'); tb.innerHTML=''; users.forEach(u=>tb.appendChild(userRow(u))); }
     function addUserRow(){ document.querySelector('#users-table tbody').appendChild(userRow({username:'', is_admin:false, active:true})); }
     async function loadUsers(){ const r=await fetch('/api/users'); const d=await r.json(); users=d.users||[]; renderUsers(); }
-    async function saveAllUsers(){ const rows=[...document.querySelectorAll('#users-table tbody tr')]; const payload=rows.map(tr=>{const [name,pin,admin,active]=tr.querySelectorAll('input'); return {id:tr.dataset.id||null, delete:tr.dataset.delete==='1', username:name.value.trim(), pin:pin.value.trim(), is_admin:admin.checked, active:active.checked};}); const r=await fetch('/api/users/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:payload})}); const d=await r.json(); const el=document.getElementById('users-status'); if(d.ok){ el.textContent='Gespeichert.'; await loadUsers(); setTimeout(()=>el.textContent='',1500);} else { el.textContent='Fehler'; }
+    async function saveAllUsers(){ 
+        const rows=[...document.querySelectorAll('#users-table tbody tr')]; 
+        const payload=rows.map(tr=>{const [name,pin,admin,active]=tr.querySelectorAll('input'); return {id:tr.dataset.id||null, delete:tr.dataset.delete==='1', username:name.value.trim(), pin:pin.value.trim(), is_admin:admin.checked, active:active.checked};}); 
+        const r=await fetch('/api/users/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:payload})}); 
+        const d=await r.json(); 
+        const el=document.getElementById('users-status'); 
+        if(d.ok){ 
+            el.textContent='Gespeichert.'; 
+            await loadUsers(); 
+            setTimeout(()=>el.textContent='',1500);
+        } else { 
+            // Zeige vollständige Fehlermeldung an
+            alert(d.msg || 'Fehler beim Speichern');
+            el.textContent='Fehler'; 
+            await loadUsers(); // Reload um gelöschte Markierungen zurückzusetzen
+        }
     }
 
     // ---- Payment Methods CRUD ----
