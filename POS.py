@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_file, render_template, redirect, url_for, session
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3, csv, io, os
+import sqlite3, csv, io, os, json
 
 # Flask lädt Templates (index.html, admin.html, login.html) aus dem aktuellen Ordner
 app = Flask(__name__, template_folder='.')
@@ -75,6 +75,18 @@ def init_db():
             total REAL NOT NULL,
             FOREIGN KEY(sale_id) REFERENCES sale_headers(id)
         );
+
+        CREATE TABLE IF NOT EXISTS audit_log(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            user_id INTEGER,
+            username TEXT,
+            action TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id INTEGER,
+            details TEXT,
+            ip_address TEXT
+        );
         """
     )
 
@@ -123,6 +135,20 @@ init_db()
 
 # ---------- Helpers ----------
 
+def log_action(cur, action, entity_type=None, entity_id=None, details=None, user=None, ip_address=None):
+    """
+    Log an action to the audit_log table.
+    IMPORTANT: Takes a cursor to avoid database locks - do not open a new connection!
+    """
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user_id = user.get("id") if user else None
+    username = user.get("username") if user else None
+    details_json = json.dumps(details) if details and isinstance(details, dict) else details
+    cur.execute(
+        "INSERT INTO audit_log(ts, user_id, username, action, entity_type, entity_id, details, ip_address) VALUES(?,?,?,?,?,?,?,?)",
+        (ts, user_id, username, action, entity_type, entity_id, details_json, ip_address)
+    )
+
 def current_user():
     uid = session.get("user_id")
     if not uid:
@@ -146,14 +172,21 @@ def api_login():
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     pin = (data.get("pin") or "").strip()
-    c = conn()
-    u = c.execute(
+    ip_address = request.remote_addr
+    c = conn(); cur = c.cursor()
+    u = cur.execute(
         "SELECT id, username, pin_hash, is_admin FROM users WHERE username=? AND active=1",
         (username,),
     ).fetchone()
-    c.close()
     if not u or not check_password_hash(u["pin_hash"], pin):
+        # Log failed login attempt
+        log_action(cur, "login_failed", details={"username": username}, ip_address=ip_address)
+        c.commit(); c.close()
         return jsonify(ok=False, msg="Benutzer oder PIN falsch."), 401
+    # Log successful login
+    user_dict = {"id": u["id"], "username": u["username"]}
+    log_action(cur, "login_success", user=user_dict, ip_address=ip_address)
+    c.commit(); c.close()
     session["user_id"] = u["id"]
     return jsonify(ok=True, is_admin=bool(u["is_admin"]))
 
@@ -262,6 +295,12 @@ def sale():
             (now, ln["item_id"], ln["item_name"], ln["qty"], ln["price"], ln["total"]),
         )
 
+    # Log sale creation
+    pm_name = cur.execute("SELECT name FROM payment_methods WHERE id=?", (payment_method_id,)).fetchone()
+    log_action(cur, "sale_create", entity_type="sale", entity_id=sale_id,
+               details={"total": cart_total, "payment_method": pm_name["name"] if pm_name else None},
+               user=user)
+
     c.commit(); c.close()
     return jsonify(ok=True, sale_id=sale_id, total=round(cart_total, 2))
 
@@ -306,157 +345,31 @@ def export_csv():
     return send_file(mem, mimetype="text/csv", as_attachment=True, download_name="verkauf.csv")
 
 
-@app.route("/export_purchases.csv")
-def export_purchases_csv():
-    c = conn()
-    
-    # Query-Parameter (gleiche wie bei /api/admin/purchases)
-    start = request.args.get('start')
-    end = request.args.get('end')
-    payment_method_id = request.args.get('payment_method_id')
-    user_id = request.args.get('user_id')
-    group = request.args.get('group', '1') in ('1', 'true', 'yes')
-    
-    # WHERE-Klausel bauen
-    where_clauses = []
-    params = []
-    if start:
-        where_clauses.append("date(h.ts) >= ?")
-        params.append(start)
-    if end:
-        where_clauses.append("date(h.ts) <= ?")
-        params.append(end)
-    if payment_method_id:
-        where_clauses.append("h.payment_method_id = ?")
-        params.append(payment_method_id)
-    if user_id:
-        where_clauses.append("h.user_id = ?")
-        params.append(user_id)
-    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    
-    buf = io.StringIO()
-    w = csv.writer(buf, delimiter=';')
-    
-    if group:
-        # Gruppierte Ansicht: eine Zeile pro Bestellung
-        w.writerow(["Bestellung-ID", "Zeit", "Artikel", "Zahlart", "Benutzer", "Gesamt"])
-        headers = c.execute(
-            "SELECT h.id, h.ts, h.total, u.username as user, p.name as payment_method "
-            "FROM sale_headers h "
-            "LEFT JOIN users u ON u.id=h.user_id "
-            "LEFT JOIN payment_methods p ON p.id=h.payment_method_id "
-            f"{where_sql} "
-            "ORDER BY h.id DESC", params
-        ).fetchall()
-        
-        lines_rows = c.execute(
-            "SELECT l.sale_id, l.item_name, l.qty "
-            "FROM sale_lines l JOIN sale_headers h ON h.id=l.sale_id "
-            f"{where_sql} "
-            "ORDER BY l.id ASC", params
-        ).fetchall()
-        
-        grouped = {}
-        for l in lines_rows:
-            sid = l['sale_id']
-            grouped.setdefault(sid, []).append(l)
-        
-        for h in headers:
-            items_list = grouped.get(h["id"], [])
-            items_str = ", ".join([f"{l['qty']}x {l['item_name']}" for l in items_list])
-            w.writerow([
-                h["id"],
-                h["ts"],
-                items_str,
-                h["payment_method"] or "",
-                h["user"] or "",
-                f"{h['total']:.2f}"
-            ])
-    else:
-        # Einzelposten: jede Zeile ist ein Item
-        w.writerow(["Bestellung-ID", "Zeit", "Artikel", "Menge", "Preis", "Zahlart", "Benutzer", "Gesamt"])
-        rows = c.execute(
-            "SELECT l.sale_id, h.ts, l.item_name, l.qty, l.price, l.total, "
-            "u.username as user, p.name as payment_method "
-            "FROM sale_lines l "
-            "JOIN sale_headers h ON h.id=l.sale_id "
-            "LEFT JOIN users u ON u.id=h.user_id "
-            "LEFT JOIN payment_methods p ON p.id=h.payment_method_id "
-            f"{where_sql} "
-            "ORDER BY h.id DESC, l.id ASC", params
-        ).fetchall()
-        
-        for r in rows:
-            w.writerow([
-                r["sale_id"],
-                r["ts"],
-                r["item_name"],
-                r["qty"],
-                f"{r['price']:.2f}",
-                r["payment_method"] or "",
-                r["user"] or "",
-                f"{r['total']:.2f}"
-            ])
-    
-    c.close()
-    mem = io.BytesIO(buf.getvalue().encode("utf-8"))
-    mem.seek(0)
-    return send_file(mem, mimetype="text/csv", as_attachment=True, download_name="kaeufe.csv")
-
-
-@app.route("/export_today.csv")
-def export_today_csv():
-    c = conn()
-    
-    buf = io.StringIO()
-    w = csv.writer(buf, delimiter=';')
-    
-    w.writerow(["Bestellung-ID", "Zeit", "Artikel", "Zahlart", "Benutzer", "Gesamt"])
-    
-    # GLEICHE Logik wie api_admin_summary - date('now','localtime')
-    headers = c.execute(
-        "SELECT h.id, h.ts, h.total, u.username as user, p.name as payment_method "
-        "FROM sale_headers h "
-        "LEFT JOIN users u ON u.id=h.user_id "
-        "LEFT JOIN payment_methods p ON p.id=h.payment_method_id "
-        "WHERE date(h.ts) = date('now','localtime') "
-        "ORDER BY h.id DESC"
-    ).fetchall()
-    
-    lines_rows = c.execute(
-        "SELECT l.sale_id, l.item_name, l.qty "
-        "FROM sale_lines l JOIN sale_headers h ON h.id=l.sale_id "
-        "WHERE date(h.ts) = date('now','localtime') "
-        "ORDER BY l.id ASC"
-    ).fetchall()
-    
-    grouped = {}
-    for l in lines_rows:
-        sid = l['sale_id']
-        grouped.setdefault(sid, []).append(l)
-    
-    # Dateiname
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    
-    for h in headers:
-        items_list = grouped.get(h["id"], [])
-        items_str = ", ".join([f"{l['qty']}x {l['item_name']}" for l in items_list])
-        w.writerow([
-            h["id"],
-            h["ts"],
-            items_str,
-            h["payment_method"] or "",
-            h["user"] or "",
-            f"{h['total']:.2f}"
-        ])
-    
-    c.close()
-    mem = io.BytesIO(buf.getvalue().encode("utf-8"))
-    mem.seek(0)
-    return send_file(mem, mimetype="text/csv", as_attachment=True, download_name=f"tagesbericht_{today_str}.csv")
-
-
 # ---------- Admin APIs ----------
+
+@app.route("/api/admin/delete_sale/<int:sale_id>", methods=["DELETE"])
+def api_delete_sale(sale_id):
+    user = current_user()
+    if not user or not user.get("is_admin"):
+        return jsonify(ok=False, msg="Nicht berechtigt"), 403
+    c = conn(); cur = c.cursor()
+    # Get sale details before deleting
+    sale = cur.execute("SELECT ts, total FROM sale_headers WHERE id=?", (sale_id,)).fetchone()
+    if not sale:
+        c.close()
+        return jsonify(ok=False, msg="Verkauf nicht gefunden"), 404
+    ts = sale["ts"]
+    total = sale["total"]
+    # Delete from all tables
+    cur.execute("DELETE FROM sale_lines WHERE sale_id=?", (sale_id,))
+    cur.execute("DELETE FROM sale_headers WHERE id=?", (sale_id,))
+    cur.execute("DELETE FROM sales WHERE ts=?", (ts,))
+    # Log the storno
+    log_action(cur, "sale_delete", entity_type="sale", entity_id=sale_id,
+               details={"total": total, "ts": ts}, user=user)
+    c.commit(); c.close()
+    return jsonify(ok=True)
+
 @app.route("/api/items")
 def api_items_list():
     c = conn(); items = [dict(r) for r in c.execute(
@@ -468,6 +381,7 @@ def api_items_list():
 
 @app.route("/api/items/bulk", methods=["POST"])
 def api_items_bulk():
+    user = current_user()
     data = request.get_json(silent=True) or {}
     items = data.get("items", [])
     if not isinstance(items, list):
@@ -481,16 +395,23 @@ def api_items_bulk():
         sort = int(it.get("sort") or 0)
         if _id and _delete:
             cur.execute("DELETE FROM items WHERE id=?", (_id,))
+            log_action(cur, "item_delete", entity_type="item", entity_id=_id,
+                       details={"name": name}, user=user)
         elif _id:
             cur.execute(
                 "UPDATE items SET name=?, price=?, active=?, sort=? WHERE id=?",
                 (name, price, active, sort, _id),
             )
+            log_action(cur, "item_update", entity_type="item", entity_id=_id,
+                       details={"name": name, "price": price}, user=user)
         else:
             cur.execute(
                 "INSERT INTO items(name, price, active, sort) VALUES(?,?,?,?)",
                 (name, price, active, sort),
             )
+            new_id = cur.lastrowid
+            log_action(cur, "item_create", entity_type="item", entity_id=new_id,
+                       details={"name": name, "price": price}, user=user)
     c.commit(); c.close(); return jsonify(ok=True)
 
 
@@ -505,6 +426,7 @@ def api_pm_list():
 
 @app.route("/api/payment_methods/bulk", methods=["POST"])
 def api_pm_bulk():
+    user = current_user()
     data = request.get_json(silent=True) or {}
     methods = data.get("methods", [])
     if not isinstance(methods, list):
@@ -524,6 +446,8 @@ def api_pm_bulk():
             if is_protected:  # Bar nicht löschen
                 continue
             cur.execute("DELETE FROM payment_methods WHERE id=?", (_id,))
+            log_action(cur, "payment_delete", entity_type="payment_method", entity_id=_id,
+                       details={"name": name}, user=user)
         elif _id:
             if is_protected:
                 cur.execute(
@@ -535,11 +459,16 @@ def api_pm_bulk():
                     "UPDATE payment_methods SET name=?, active=?, sort=?, protected=? WHERE id=?",
                     (name, active, sort, protected, _id),
                 )
+            log_action(cur, "payment_update", entity_type="payment_method", entity_id=_id,
+                       details={"name": name}, user=user)
         else:
             cur.execute(
                 "INSERT INTO payment_methods(name,active,sort,protected) VALUES(?,?,?,?)",
                 (name, active, sort, protected),
             )
+            new_id = cur.lastrowid
+            log_action(cur, "payment_create", entity_type="payment_method", entity_id=new_id,
+                       details={"name": name}, user=user)
     c.commit(); c.close(); return jsonify(ok=True)
 
 
@@ -554,6 +483,7 @@ def api_users_list():
 
 @app.route("/api/users/bulk", methods=["POST"])
 def api_users_bulk():
+    current = current_user()
     data = request.get_json(silent=True) or {}
     users = data.get("users", [])
     if not isinstance(users, list):
@@ -580,24 +510,13 @@ def api_users_bulk():
             row = cur.execute("SELECT username,is_admin,active FROM users WHERE id=?", (_id,)).fetchone()
             if not row:
                 continue
-            
-            # NEU: Prüfe ob User Verkäufe hat
-            has_sales = cur.execute(
-                "SELECT COUNT(*) FROM sale_headers WHERE user_id=?", (_id,)
-            ).fetchone()[0] > 0
-            
-            if has_sales:
-                c.close()
-                return jsonify(
-                    ok=False, 
-                    msg=f"User '{row['username']}' hat Verkäufe und kann nicht gelöscht werden. Bitte deaktivieren."
-                ), 400
-            
             was_admin_active = bool(row["is_admin"]) and bool(row["active"])
             if was_admin_active and admin_count <= 1:
                 skipped.append(row["username"] or f"#{_id}")
                 continue
             cur.execute("DELETE FROM users WHERE id=?", (_id,))
+            log_action(cur, "user_delete", entity_type="user", entity_id=_id,
+                       details={"username": row["username"]}, user=current)
             if was_admin_active:
                 admin_count -= 1
             continue
@@ -644,6 +563,8 @@ def api_users_bulk():
                     "UPDATE users SET username=?, is_admin=?, active=? WHERE id=?",
                     (username, is_admin_new, active_new, _id),
                 )
+            log_action(cur, "user_update", entity_type="user", entity_id=_id,
+                       details={"username": username}, user=current)
             continue
 
         # Neuer Benutzer
@@ -653,6 +574,9 @@ def api_users_bulk():
             "INSERT INTO users(username,pin_hash,is_admin,active) VALUES(?,?,?,?)",
             (username, generate_password_hash(new_pin), is_admin_new, active_new),
         )
+        new_id = cur.lastrowid
+        log_action(cur, "user_create", entity_type="user", entity_id=new_id,
+                   details={"username": username}, user=current)
         if is_admin_new and active_new:
             admin_count += 1
 
@@ -814,34 +738,33 @@ def api_admin_purchases():
         return jsonify(ok=True, grouped=False, rows=rows, currency=CURRENCY)
 
 
-@app.route("/api/admin/delete_sale/<int:sale_id>", methods=["DELETE"])
-def api_delete_sale(sale_id):
+@app.route("/api/admin/audit_log")
+def api_admin_audit_log():
     user = current_user()
     if not user or not user.get("is_admin"):
-        return jsonify(ok=False, msg="Nicht authorisiert"), 403
-    
+        return jsonify(ok=False, msg="Nicht berechtigt"), 403
+
     c = conn()
-    cur = c.cursor()
-    
-    # Timestamp für Kompatibilitätstabelle
-    ts_row = cur.execute("SELECT ts FROM sale_headers WHERE id=?", (sale_id,)).fetchone()
-    if not ts_row:
-        c.close()
-        return jsonify(ok=False, msg="Bestellung nicht gefunden"), 404
-    
-    ts = ts_row[0]
-    
-    # Lösche aus normalisierten Tabellen
-    cur.execute("DELETE FROM sale_lines WHERE sale_id=?", (sale_id,))
-    cur.execute("DELETE FROM sale_headers WHERE id=?", (sale_id,))
-    
-    # Lösche aus alter Kompatibilitätstabelle
-    cur.execute("DELETE FROM sales WHERE ts=?", (ts,))
-    
-    c.commit()
+    limit = request.args.get('limit', '20')
+    user_id = request.args.get('user_id')
+
+    query = "SELECT id, ts, user_id, username, action, entity_type, entity_id, details, ip_address FROM audit_log"
+    params = []
+
+    if user_id:
+        query += " WHERE user_id = ?"
+        params.append(user_id)
+
+    query += " ORDER BY id DESC"
+
+    if limit and limit != '0':
+        query += " LIMIT ?"
+        params.append(int(limit))
+
+    entries = [dict(r) for r in c.execute(query, params).fetchall()]
     c.close()
-    
-    return jsonify(ok=True)
+
+    return jsonify(ok=True, entries=entries)
 
 
 if __name__ == "__main__":

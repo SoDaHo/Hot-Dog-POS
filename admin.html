@@ -18,9 +18,9 @@
         table{border-collapse:collapse;width:100%}
         th,td{border-bottom:1px solid #eee;padding:10px;text-align:left}
         th{background:#fafafa;font-weight:600}
-        input[type="text"],input[type="number"],input[type="password"]{border:1px solid #ddd;border-radius:10px;padding:8px 10px}
+        input[type="text"],input[type="number"],input[type="password"],select{border:1px solid #ddd;border-radius:10px;padding:8px 10px}
         .btn{border:none;border-radius:10px;padding:8px 12px;background:#111;color:#fff;cursor:pointer}
-        .btn-outline{background:#fff;color:#111;border:1px solid #ddd}
+        .btn-outline{background:#fff;color:#111;border:1px solid #ddd;cursor:pointer}
         .muted{color:var(--muted)}
         .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#eee}
         .right{margin-left:auto}
@@ -29,9 +29,22 @@
         .sale-group-0 td{ background:#fafcff }
         .sale-group-1 td{ background:#fffdf6 }
         .sale-first td{ border-top:2px solid #e8e8e8 }
-        
-        /* Total-Zeile am Ende der Tabelle */
-        .total-row td{ border-top:2px solid #333; font-weight:700; font-size:16px; padding-top:14px }
+
+        /* Audit Log Styles */
+        .audit-entry { margin-bottom:12px; padding:10px; background:#fafafa; border-radius:8px; border-left:4px solid #ddd; }
+        .audit-entry.login_success { border-left-color:#2e7d32; }
+        .audit-entry.login_failed { border-left-color:#c62828; }
+        .audit-entry.sale_create { border-left-color:#1976d2; }
+        .audit-entry.sale_delete { border-left-color:#f57c00; }
+        .audit-entry.item_update, .audit-entry.item_create, .audit-entry.item_delete { border-left-color:#7b1fa2; }
+        .audit-entry.user_update, .audit-entry.user_create, .audit-entry.user_delete { border-left-color:#00796b; }
+        .audit-entry.payment_update, .audit-entry.payment_create, .audit-entry.payment_delete { border-left-color:#d32f2f; }
+
+        .audit-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+        .audit-action { font-weight:600; }
+        .audit-time { font-size:12px; color:var(--muted); }
+        .audit-details { font-size:14px; color:#333; }
+        .audit-ip { font-size:12px; color:var(--muted); margin-top:4px; }
     </style>
 </head>
 <body>
@@ -46,6 +59,7 @@
         <button class="tab-btn" data-tab="items">Artikel</button>
         <button class="tab-btn" data-tab="users">Benutzer</button>
         <button class="tab-btn" data-tab="payments">Zahlarten</button>
+        <button class="tab-btn" data-tab="audit">Audit-Log</button>
     </div>
 
     <!-- Übersicht / Sales Tab -->
@@ -53,12 +67,10 @@
         <div style="display:flex; gap:12px; align-items:center">
             <h3 style="margin:0">Verkaufte Mengen pro Artikel</h3>
             <span id="summary-date" class="badge"></span>
-            <!-- Neu: Badges direkt neben dem Datum -->
             <span class="badge">Summe: <span id="sum-total">0.00</span> <span id="sum-currency">CHF</span></span>
             <span class="badge">Transaktionen: <span id="sum-count">0</span></span>
-            <button class="btn-outline right" onclick="exportTodayCSV()">CSV Tagesbericht</button>
+            <button class="btn-outline right" onclick="exportCSV()">CSV Export</button>
         </div>
-        <!-- Entfernt: separater Badge-Block unter der Überschrift -->
         <div style="overflow:auto;margin-top:10px">
             <table id="per-item">
                 <thead><tr><th>Artikel</th><th>Menge</th><th>Summe</th></tr></thead>
@@ -79,8 +91,8 @@
     <section id="tab-purchases" class="card" style="display:none">
         <div style="display:flex; gap:12px; align-items:center">
             <h3 id="purchases-title" style="margin:0">Alle Käufe (gruppiert)</h3>
-            <span class="badge">Total: <span id="purchases-total">0.00</span> <span id="purchases-currency">CHF</span></span>
-            <button class="btn-outline right" onclick="exportPurchasesCSV()">CSV Export (gefiltert)</button>
+            <span class="muted" style="margin-left:8px">Angezeigt in der ursprünglichen Reihenfolge</span>
+            <button class="btn-outline right" onclick="exportCSV()">CSV Export</button>
         </div>
 
         <!-- Filterbereich -->
@@ -88,7 +100,6 @@
             <label>Zeitraum:
                 <select id="filter-last">
                     <option value="">Alle</option>
-                    <!-- letzte 5 Tage mit Daten werden per JS befüllt -->
                 </select>
             </label>
             <div id="custom-range" style="display:none;align-items:center;gap:6px">
@@ -119,6 +130,7 @@
     <section id="tab-items" class="card" style="display:none">
         <div style="display:flex;gap:10px;align-items:center">
             <h3 style="margin:0">Artikel verwalten</h3>
+            <span class="muted">(in DB gespeichert)</span>
             <button class="btn right" onclick="addItemRow()">Neuen Artikel</button>
         </div>
         <div style="overflow:auto;margin-top:10px">
@@ -159,6 +171,39 @@
             <span class="muted" id="pm-status"></span>
         </div>
     </section>
+
+    <!-- Audit Log Tab -->
+    <section id="tab-audit" class="card" style="display:none">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+            <h3 style="margin:0">Audit-Log</h3>
+            <label>Kategorie:
+                <select id="audit-category">
+                    <option value="">Alle</option>
+                    <option value="login">Logins</option>
+                    <option value="sale">Verkäufe</option>
+                    <option value="item">Artikel</option>
+                    <option value="user">Benutzer</option>
+                    <option value="payment">Zahlarten</option>
+                </select>
+            </label>
+            <label>Benutzer:
+                <select id="audit-user-filter">
+                    <option value="">Alle</option>
+                </select>
+            </label>
+            <label>Einträge:
+                <select id="audit-limit">
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="0">Alle</option>
+                </select>
+            </label>
+            <button class="btn right" onclick="loadAuditLog()">Aktualisieren</button>
+        </div>
+
+        <div id="audit-log-container"></div>
+    </section>
 </div>
 
 <script>
@@ -168,28 +213,20 @@
             document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
             btn.classList.add('active');
             const tab = btn.dataset.tab;
-            ['sales','purchases','items','users','payments'].forEach(t=>{
+            ['sales','purchases','items','users','payments','audit'].forEach(t=>{
                 document.getElementById('tab-'+t).style.display = (t===tab)?'block':'none';
             });
+            if(tab === 'audit') loadAuditLog();
         });
     });
 
-    function exportTodayCSV(){ 
-        window.location='/export_today.csv';
-    }
-    
-    function exportPurchasesCSV(){ 
-        const params = getFilterParams();
-        const qs = new URLSearchParams(params).toString();
-        window.location='/export_purchases.csv' + (qs ? ('?'+qs) : '');
-    }
+    function exportCSV(){ window.location='/export.csv'; }
 
     // --- Filter Hilfsfunktionen ---
     function formatDayLabel(date){
         return date.toLocaleDateString('de-DE',{weekday:'short', day:'2-digit', month:'2-digit'});
     }
 
-    // Neu: verfügbare Tage (max. 5) vom Server laden
     async function populateLastDays(){
         const sel=document.getElementById('filter-last');
         sel.innerHTML = '<option value="">Alle</option>';
@@ -198,14 +235,14 @@
             const d=await r.json();
             const days=(d.ok && d.days)? d.days : [];
             days.forEach((day, idx)=>{
-                const val = day.date; // YYYY-MM-DD
+                const val = day.date;
                 const dt = new Date(val + 'T00:00:00');
                 const label = formatDayLabel(dt);
                 const opt=document.createElement('option');
                 opt.value = val; opt.textContent = label;
                 sel.appendChild(opt);
             });
-        }catch(e){ /* still show default options */ }
+        }catch(e){}
         const cust=document.createElement('option'); cust.value='custom'; cust.textContent='Benutzerdefiniert...'; sel.appendChild(cust);
         sel.addEventListener('change', ()=>{
             document.getElementById('custom-range').style.display = sel.value==='custom' ? 'flex' : 'none';
@@ -214,10 +251,8 @@
     }
 
     async function populatePMandUsers(){
-        // Zahlarten
         const pmSel=document.getElementById('filter-pm'); pmSel.innerHTML='<option value="">Alle</option>';
         const rpm=await fetch('/api/payment_methods'); const dpm=await rpm.json(); (dpm.methods||[]).forEach(m=>{ const o=document.createElement('option'); o.value=m.id; o.textContent=m.name; pmSel.appendChild(o); });
-        // Users
         const uSel=document.getElementById('filter-user'); uSel.innerHTML='<option value="">Alle</option>';
         const ru=await fetch('/api/users'); const du=await ru.json(); (du.users||[]).forEach(u=>{ const o=document.createElement('option'); o.value=u.id; o.textContent=u.username; uSel.appendChild(o); });
     }
@@ -246,13 +281,11 @@
         const data = await r.json();
         if(!data.ok) return;
 
-        // Datum/Badges und Summen
         document.getElementById('summary-date').textContent = data.date_label;
         document.getElementById('sum-total').textContent = data.total.toFixed(2);
         document.getElementById('sum-currency').textContent = data.currency;
         document.getElementById('sum-count').textContent = data.count;
 
-        // Per-Artikel
         const pi = document.querySelector('#per-item tbody'); pi.innerHTML='';
         (data.per_item||[]).forEach(r=>{
             const tr=document.createElement('tr');
@@ -260,7 +293,6 @@
             pi.appendChild(tr);
         });
 
-        // Letzte 5 Bestellungen (Einzelposten, farblich gruppiert)
         const tb = document.querySelector('#last-orders-table tbody'); tb.innerHTML='';
         let lastSaleId = null, groupIdx = 1;
         (data.last5_rows||[]).forEach(rw=>{
@@ -278,7 +310,7 @@
         });
     }
 
-    // ---- Load Purchases (neu mit Total + Storno) ----
+    // ---- Load Purchases ----
     async function loadPurchases(){
         const params = getFilterParams();
         const qs = new URLSearchParams(params).toString();
@@ -297,18 +329,14 @@
         }
 
         const tb = document.querySelector('#purchases-table tbody'); tb.innerHTML='';
-        let grandTotal = 0;
-
         if(data.grouped){
             (data.purchases||[]).forEach(p=>{
                 const tr=document.createElement('tr');
                 const itemsStr = (p.lines||[]).map(l=>`${l.qty}x ${l.item_name}`).join(', ');
-                tr.innerHTML = `<td>${p.ts}</td><td>${itemsStr}</td><td>${p.payment_method||''}</td><td>${p.user||''}</td><td>${p.total.toFixed(2)} ${data.currency}</td><td><button class="btn-outline" style="color:#b00020;border-color:#b00020" onclick="deleteSale(${p.id})">✕ Storno</button></td>`;
+                tr.innerHTML = `<td>${p.ts}</td><td>${itemsStr}</td><td>${p.payment_method||''}</td><td>${p.user||''}</td><td>${p.total.toFixed(2)} ${data.currency}</td><td><button class="btn-outline" onclick="stornoSale(${p.id})">Storno</button></td>`;
                 tb.appendChild(tr);
-                grandTotal += p.total;
             });
         } else {
-            // Einzelposten: farblich pro Bestellung gruppieren
             let lastSaleId = null, groupIdx = 1;
             (data.rows||[]).forEach((rw, i)=>{
                 const tr=document.createElement('tr');
@@ -320,37 +348,21 @@
                 }
                 tr.classList.add(`sale-group-${groupIdx}`);
                 if(firstOfSale) tr.classList.add('sale-first');
-                // Storno-Button nur in erster Zeile einer Bestellung
-                const actionBtn = firstOfSale ? `<button class="btn-outline" style="color:#b00020;border-color:#b00020" onclick="deleteSale(${rw.sale_id})">✕ Storno</button>` : '';
-                tr.innerHTML = `<td>${rw.ts}</td><td>${rw.item_name}</td><td>${rw.qty}</td><td>${rw.payment_method||''}</td><td>${rw.user||''}</td><td>${rw.total.toFixed(2)} ${data.currency}</td><td>${actionBtn}</td>`;
+
+                const stornoBtn = firstOfSale ? `<button class="btn-outline" onclick="stornoSale(${rw.sale_id})">Storno</button>` : '';
+                tr.innerHTML = `<td>${rw.ts}</td><td>${rw.item_name}</td><td>${rw.qty}</td><td>${rw.payment_method||''}</td><td>${rw.user||''}</td><td>${rw.total.toFixed(2)} ${data.currency}</td><td>${stornoBtn}</td>`;
                 tb.appendChild(tr);
-                grandTotal += rw.total;
             });
         }
-
-        // Badge oben aktualisieren
-        document.getElementById('purchases-total').textContent = grandTotal.toFixed(2);
-        document.getElementById('purchases-currency').textContent = data.currency;
-
-        // Total-Zeile am Ende der Tabelle hinzufügen
-        const totalRow = document.createElement('tr');
-        totalRow.className = 'total-row';
-        const colspan = data.grouped ? 5 : 6; // +1 wegen Aktions-Spalte
-        totalRow.innerHTML = `<td colspan="${colspan}" style="text-align:right">Gesamt:</td><td><strong>${grandTotal.toFixed(2)} ${data.currency}</strong></td>`;
-        tb.appendChild(totalRow);
     }
 
-    // Neue Funktion: Bestellung stornieren
-    async function deleteSale(saleId){
-        if(!confirm('Bestellung wirklich stornieren? Diese Aktion kann nicht rückgängig gemacht werden.')) return;
-        
+    async function stornoSale(saleId){
+        if(!confirm('Möchten Sie diese Bestellung wirklich stornieren?')) return;
         const r = await fetch(`/api/admin/delete_sale/${saleId}`, {method:'DELETE'});
         const d = await r.json();
-        
         if(d.ok){
             alert('Bestellung storniert.');
-            loadPurchases(); // Tabelle neu laden
-            loadSales(); // Übersicht auch aktualisieren
+            loadPurchases(); loadSales();
         } else {
             alert('Fehler beim Stornieren: ' + (d.msg || 'Unbekannt'));
         }
@@ -391,23 +403,7 @@
     function renderUsers(){ const tb=document.querySelector('#users-table tbody'); tb.innerHTML=''; users.forEach(u=>tb.appendChild(userRow(u))); }
     function addUserRow(){ document.querySelector('#users-table tbody').appendChild(userRow({username:'', is_admin:false, active:true})); }
     async function loadUsers(){ const r=await fetch('/api/users'); const d=await r.json(); users=d.users||[]; renderUsers(); }
-    async function saveAllUsers(){ 
-        const rows=[...document.querySelectorAll('#users-table tbody tr')]; 
-        const payload=rows.map(tr=>{const [name,pin,admin,active]=tr.querySelectorAll('input'); return {id:tr.dataset.id||null, delete:tr.dataset.delete==='1', username:name.value.trim(), pin:pin.value.trim(), is_admin:admin.checked, active:active.checked};}); 
-        const r=await fetch('/api/users/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:payload})}); 
-        const d=await r.json(); 
-        const el=document.getElementById('users-status'); 
-        if(d.ok){ 
-            el.textContent='Gespeichert.'; 
-            await loadUsers(); 
-            setTimeout(()=>el.textContent='',1500);
-        } else { 
-            // Zeige vollständige Fehlermeldung an
-            alert(d.msg || 'Fehler beim Speichern');
-            el.textContent='Fehler'; 
-            await loadUsers(); // Reload um gelöschte Markierungen zurückzusetzen
-        }
-    }
+    async function saveAllUsers(){ const rows=[...document.querySelectorAll('#users-table tbody tr')]; const payload=rows.map(tr=>{const [name,pin,admin,active]=tr.querySelectorAll('input'); return {id:tr.dataset.id||null, delete:tr.dataset.delete==='1', username:name.value.trim(), pin:pin.value.trim(), is_admin:admin.checked, active:active.checked};}); const r=await fetch('/api/users/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({users:payload})}); const d=await r.json(); const el=document.getElementById('users-status'); if(d.ok){ el.textContent='Gespeichert.'; await loadUsers(); setTimeout(()=>el.textContent='',1500);} else { el.textContent='Fehler'; } }
 
     // ---- Payment Methods CRUD ----
     let methods=[];
@@ -423,7 +419,112 @@
     function renderPM(){ const tb=document.querySelector('#pm-table tbody'); tb.innerHTML=''; methods.sort((a,b)=>(a.sort||0)-(b.sort||0)); methods.forEach(m=>tb.appendChild(pmRow(m))); }
     function addPMRow(){ document.querySelector('#pm-table tbody').appendChild(pmRow({name:'Neue Zahlart', active:true, sort:(methods.length?Math.max(...methods.map(i=>i.sort||0))+1:0), protected:false})); }
     async function loadPM(){ const r=await fetch('/api/payment_methods'); const d=await r.json(); methods=d.methods||[]; renderPM(); }
-    async function saveAllPM(){ const rows=[...document.querySelectorAll('#pm-table tbody tr')]; const payload=rows.map(tr=>{const [s,n,a]=tr.querySelectorAll('input'); return {id:tr.dataset.id||null, delete:tr.dataset.delete==='1', sort:parseInt(s.value||0), name:n.value.trim(), active:a.checked, protected: tr.dataset.protected==='1'};}); const r=await fetch('/api/payment_methods/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({methods:payload})}); const d=await r.json(); const el=document.getElementById('pm-status'); if(d.ok){ el.textContent='Gespeichert.'; await loadPM(); setTimeout(()=>el.textContent='',1500);} else { el.textContent='Fehler'; }
+    async function saveAllPM(){ const rows=[...document.querySelectorAll('#pm-table tbody tr')]; const payload=rows.map(tr=>{const [s,n,a]=tr.querySelectorAll('input'); return {id:tr.dataset.id||null, delete:tr.dataset.delete==='1', sort:parseInt(s.value||0), name:n.value.trim(), active:a.checked, protected: tr.dataset.protected==='1'};}); const r=await fetch('/api/payment_methods/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({methods:payload})}); const d=await r.json(); const el=document.getElementById('pm-status'); if(d.ok){ el.textContent='Gespeichert.'; await loadPM(); setTimeout(()=>el.textContent='',1500);} else { el.textContent='Fehler'; } }
+
+    // ---- Audit Log ----
+    async function loadAuditLog(){
+        const limit = document.getElementById('audit-limit').value;
+        const userFilter = document.getElementById('audit-user-filter').value;
+        const categoryFilter = document.getElementById('audit-category').value;
+        const params = new URLSearchParams();
+        if(limit && limit !== '0') params.append('limit', limit);
+        if(userFilter) params.append('user_id', userFilter);
+
+        const r = await fetch('/api/admin/audit_log?' + params.toString());
+        const d = await r.json();
+        if(!d.ok) return;
+
+        let entries = d.entries || [];
+        if(categoryFilter){
+            entries = entries.filter(e => {
+                if(categoryFilter === 'login') return e.action.includes('login');
+                if(categoryFilter === 'sale') return e.action.includes('sale');
+                if(categoryFilter === 'item') return e.action.includes('item');
+                if(categoryFilter === 'user') return e.action.includes('user');
+                if(categoryFilter === 'payment') return e.action.includes('payment');
+                return true;
+            });
+        }
+
+        const container = document.getElementById('audit-log-container');
+        container.innerHTML = '';
+
+        if(entries.length === 0){
+            container.innerHTML = '<p class="muted">Keine Einträge gefunden.</p>';
+            return;
+        }
+
+        entries.forEach(log => {
+            const entry = document.createElement('div');
+            entry.className = `audit-entry ${log.action}`;
+
+            const actionText = formatAction(log.action);
+            const userText = log.username || 'System';
+            const detailsHtml = formatDetails(log.details);
+            const ipText = log.ip_address ? `IP: ${log.ip_address}` : '';
+
+            entry.innerHTML = `
+                <div class="audit-header">
+                    <div class="audit-action">${actionText}</div>
+                    <div class="audit-time">${log.ts} • ${userText}</div>
+                </div>
+                <div class="audit-details">${detailsHtml}</div>
+                ${ipText ? `<div class="audit-ip">${ipText}</div>` : ''}
+            `;
+
+            container.appendChild(entry);
+        });
+    }
+
+    function formatAction(action){
+        const actions = {
+            'login_success': '✓ Login',
+            'login_failed': '✗ Login fehlgeschlagen',
+            'sale_create': '💰 Verkauf erstellt',
+            'sale_delete': '✗ Verkauf storniert',
+            'item_create': '+ Artikel erstellt',
+            'item_update': '✎ Artikel geändert',
+            'item_delete': '− Artikel gelöscht',
+            'user_create': '+ Benutzer erstellt',
+            'user_update': '✎ Benutzer geändert',
+            'user_delete': '− Benutzer gelöscht',
+            'payment_create': '+ Zahlart erstellt',
+            'payment_update': '✎ Zahlart geändert',
+            'payment_delete': '− Zahlart gelöscht'
+        };
+        return actions[action] || action;
+    }
+
+    function formatDetails(details){
+        if(typeof details === 'string'){
+            try{ details = JSON.parse(details); } catch(e){ return details; }
+        }
+        if(!details || typeof details !== 'object') return '—';
+
+        let parts = [];
+        if(details.username) parts.push(`Benutzer: ${details.username}`);
+        if(details.name) parts.push(`Name: ${details.name}`);
+        if(details.item_name) parts.push(`Artikel: ${details.item_name}`);
+        if(details.total !== undefined) parts.push(`Betrag: ${details.total} CHF`);
+        if(details.qty !== undefined) parts.push(`Menge: ${details.qty}`);
+        if(details.price !== undefined) parts.push(`Preis: ${details.price} CHF`);
+        if(details.payment_method) parts.push(`Zahlart: ${details.payment_method}`);
+        if(details.ts) parts.push(`Zeit: ${details.ts}`);
+
+        return parts.length > 0 ? parts.join(' • ') : '—';
+    }
+
+    async function populateAuditUserFilter(){
+        const sel = document.getElementById('audit-user-filter');
+        sel.innerHTML = '<option value="">Alle</option>';
+        const r = await fetch('/api/users');
+        const d = await r.json();
+        (d.users||[]).forEach(u=>{
+            const o = document.createElement('option');
+            o.value = u.id;
+            o.textContent = u.username;
+            sel.appendChild(o);
+        });
     }
 
     // Filter-Events
@@ -434,15 +535,20 @@
         loadPurchases();
     });
     document.getElementById('filter-grouped').addEventListener('change', ()=>loadPurchases());
-    // neu: alle Filter triggern automatisch
     document.getElementById('filter-pm').addEventListener('change', ()=>loadPurchases());
     document.getElementById('filter-user').addEventListener('change', ()=>loadPurchases());
     document.getElementById('filter-start').addEventListener('change', ()=>loadPurchases());
     document.getElementById('filter-end').addEventListener('change', ()=>loadPurchases());
 
+    // Audit filter events
+    document.getElementById('audit-limit').addEventListener('change', ()=>loadAuditLog());
+    document.getElementById('audit-user-filter').addEventListener('change', ()=>loadAuditLog());
+    document.getElementById('audit-category').addEventListener('change', ()=>loadAuditLog());
+
     // Init
     populateLastDays();
     populatePMandUsers();
+    populateAuditUserFilter();
     loadSales(); loadPurchases(); loadItems(); loadUsers(); loadPM();
 </script>
 </body>
