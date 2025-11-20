@@ -89,7 +89,7 @@
 
         /* Zahlungsbereich */
         .pay{ display:flex; flex-direction:column; gap:10px; margin-top:0 }
-        .pm-grid{ display:grid; gap:12px; align-items:stretch; grid-template-columns: repeat(3, 1fr); }
+        .pm-grid{ display:grid; gap:12px; align-items:stretch; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); }
         .pm-grid button{ padding:14px; border-radius:12px; border:2px solid #ddd; background:#fff; cursor:pointer; height:56px; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:16px; width:100%; touch-action:manipulation; -webkit-tap-highlight-color:transparent }
         .pm-grid button.active{ border-color:#111; box-shadow:0 2px 8px rgba(0,0,0,.1) }
 
@@ -112,7 +112,7 @@
             .item.expanded .price{ display:block; font-size:13px; color:#777 }
             .item.expanded .add-quick{ display:none }
 
-            .pm-grid{ grid-template-columns: repeat(3, 1fr) !important; }
+            .pm-grid{ grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)) !important; }
         }
         .item.compact .price{ display:none }
         .item.compact .qty{ display:none }

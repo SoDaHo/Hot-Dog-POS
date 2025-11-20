@@ -69,7 +69,11 @@
             <span id="summary-date" class="badge"></span>
             <span class="badge">Summe: <span id="sum-total">0.00</span> <span id="sum-currency">CHF</span></span>
             <span class="badge">Transaktionen: <span id="sum-count">0</span></span>
-            <button class="btn-outline right" onclick="exportCSV()">CSV Export</button>
+            <div class="right" style="display:flex;gap:8px">
+                <button class="btn-outline" onclick="window.location='/export_summary.csv'">📊 Tagesabschluss CSV</button>
+                <button class="btn-outline" onclick="window.location='/export_summary.pdf'">📄 Tagesabschluss PDF</button>
+                <button class="btn-outline" onclick="exportCSV()">CSV Export</button>
+            </div>
         </div>
         <div style="overflow:auto;margin-top:10px">
             <table id="per-item">

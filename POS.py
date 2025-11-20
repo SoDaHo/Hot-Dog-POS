@@ -345,6 +345,144 @@ def export_csv():
     return send_file(mem, mimetype="text/csv", as_attachment=True, download_name="verkauf.csv")
 
 
+@app.route("/export_summary.csv")
+def export_summary_csv():
+    """Export der Tagesübersicht (per Item) als CSV"""
+    c = conn()
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    per_item = c.execute(
+        "SELECT item_name, SUM(qty) as qty, SUM(total) as total FROM sales WHERE date(ts)=date('now','localtime') GROUP BY item_name ORDER BY qty DESC"
+    ).fetchall()
+
+    total_sum = sum(float(r["total"]) for r in per_item) if per_item else 0
+    count = c.execute("SELECT COUNT(DISTINCT ts) FROM sales WHERE date(ts)=date('now','localtime')").fetchone()[0]
+
+    c.close()
+
+    buf = io.StringIO(); w = csv.writer(buf, delimiter=';')
+    w.writerow([f"Tagesabschluss {today}"])
+    w.writerow([])
+    w.writerow(["Artikel","Menge","Gesamt"])
+    for r in per_item:
+        w.writerow([r["item_name"], r["qty"], f"{float(r['total']):.2f}"])
+    w.writerow([])
+    w.writerow(["TOTAL","", f"{total_sum:.2f} {CURRENCY}"])
+    w.writerow(["Transaktionen",count])
+
+    mem = io.BytesIO(buf.getvalue().encode("utf-8")); mem.seek(0)
+    return send_file(mem, mimetype="text/csv", as_attachment=True, download_name=f"tagesabschluss_{today}.csv")
+
+
+@app.route("/export_summary.pdf")
+def export_summary_pdf():
+    """Export der Tagesübersicht als schönes PDF"""
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+    except ImportError:
+        return jsonify(ok=False, msg="reportlab nicht installiert. Bitte 'pip install reportlab' ausführen"), 500
+
+    c = conn()
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    per_item = c.execute(
+        "SELECT item_name, SUM(qty) as qty, SUM(total) as total FROM sales WHERE date(ts)=date('now','localtime') GROUP BY item_name ORDER BY qty DESC"
+    ).fetchall()
+
+    total_sum = sum(float(r["total"]) for r in per_item) if per_item else 0
+    count = c.execute("SELECT COUNT(DISTINCT ts) FROM sales WHERE date(ts)=date('now','localtime')").fetchone()[0]
+
+    # Gesamttotal nach Zahlungsart
+    per_payment = c.execute(
+        "SELECT p.name as payment_method, SUM(h.total) as total "
+        "FROM sale_headers h "
+        "LEFT JOIN payment_methods p ON p.id = h.payment_method_id "
+        "WHERE date(h.ts)=date('now','localtime') "
+        "GROUP BY h.payment_method_id "
+        "ORDER BY total DESC"
+    ).fetchall()
+
+    c.close()
+
+    # PDF erstellen
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+
+    story = []
+    styles = getSampleStyleSheet()
+
+    # Titel
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24, textColor=colors.HexColor('#111'), alignment=TA_CENTER)
+    story.append(Paragraph(f"Tagesabschluss", title_style))
+    story.append(Paragraph(f"{today}", styles['Normal']))
+    story.append(Spacer(1, 1*cm))
+
+    # Tabelle
+    data = [['Artikel', 'Menge', 'Gesamt']]
+    for r in per_item:
+        data.append([r["item_name"], str(r["qty"]), f"{float(r['total']):.2f} {CURRENCY}"])
+
+    # Leere Zeile
+    data.append(['', '', ''])
+
+    # Total
+    data.append(['TOTAL', '', f"{total_sum:.2f} {CURRENCY}"])
+    data.append(['Transaktionen', str(count), ''])
+
+    table = Table(data, colWidths=[10*cm, 3*cm, 4*cm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#111')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -3), colors.beige),
+        ('GRID', (0, 0), (-1, -3), 1, colors.grey),
+        ('FONTNAME', (0, -2), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -2), (-1, -1), 12),
+        ('TOPPADDING', (0, -2), (-1, -1), 12),
+    ]))
+
+    story.append(table)
+    story.append(Spacer(1, 1*cm))
+
+    # Zweite Tabelle: Gesamttotal nach Zahlungsart
+    if per_payment:
+        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Heading2'], fontSize=16, textColor=colors.HexColor('#111'))
+        story.append(Paragraph("Gesamttotal nach Zahlungsart", subtitle_style))
+        story.append(Spacer(1, 0.5*cm))
+
+        payment_data = [['Zahlungsart', 'Gesamt']]
+        for r in per_payment:
+            payment_method = r["payment_method"] if r["payment_method"] else "Unbekannt"
+            payment_data.append([payment_method, f"{float(r['total']):.2f} {CURRENCY}"])
+
+        payment_table = Table(payment_data, colWidths=[10*cm, 7*cm])
+        payment_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#111')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+        ]))
+
+        story.append(payment_table)
+
+    doc.build(story)
+    buf.seek(0)
+
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=f"tagesabschluss_{today}.pdf")
+
+
 # ---------- Admin APIs ----------
 
 @app.route("/api/admin/delete_sale/<int:sale_id>", methods=["DELETE"])
