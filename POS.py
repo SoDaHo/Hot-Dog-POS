@@ -87,6 +87,17 @@ def init_db():
             details TEXT,
             ip_address TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS user_timers(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            label TEXT NOT NULL,
+            duration_seconds INTEGER NOT NULL DEFAULT 300,
+            type TEXT NOT NULL DEFAULT 'timer',
+            sound_enabled INTEGER NOT NULL DEFAULT 1,
+            sound_type TEXT NOT NULL DEFAULT 'beep',
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        );
         """
     )
 
@@ -97,6 +108,12 @@ def init_db():
     # Neu: eindeutige Indizes gegen zukünftige Duplikate
     c.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_items_name ON items(name)")
     c.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_pm_name ON payment_methods(name)")
+
+    # Migration: sound_type Spalte zu user_timers hinzufügen falls nicht vorhanden
+    try:
+        c.execute("ALTER TABLE user_timers ADD COLUMN sound_type TEXT NOT NULL DEFAULT 'beep'")
+    except:
+        pass  # Spalte existiert bereits
 
     # Seed Items (mit OR IGNORE abgesichert)
     if c.execute("SELECT COUNT(*) FROM items").fetchone()[0] == 0:
@@ -874,6 +891,110 @@ def api_admin_purchases():
         for r in rows:
             r['total'] = float(r['total'])
         return jsonify(ok=True, grouped=False, rows=rows, currency=CURRENCY)
+
+
+# ---------- Timer APIs ----------
+
+@app.route("/api/timers")
+def api_timers_list():
+    """Gibt alle Timer des aktuellen Benutzers zurück"""
+    user = current_user()
+    if not user:
+        return jsonify(ok=False, msg="Nicht angemeldet"), 401
+    c = conn()
+    timers = [dict(r) for r in c.execute(
+        "SELECT id, label, duration_seconds, type, sound_enabled, sound_type FROM user_timers WHERE user_id=? ORDER BY id",
+        (user["id"],)
+    ).fetchall()]
+    c.close()
+    for t in timers:
+        t["sound_enabled"] = bool(t["sound_enabled"])
+    return jsonify(ok=True, timers=timers)
+
+
+@app.route("/api/timers", methods=["POST"])
+def api_timer_create():
+    """Erstellt einen neuen Timer für den aktuellen Benutzer"""
+    user = current_user()
+    if not user:
+        return jsonify(ok=False, msg="Nicht angemeldet"), 401
+    data = request.get_json(silent=True) or {}
+    label = (data.get("label") or "").strip()
+    if not label:
+        return jsonify(ok=False, msg="Label erforderlich"), 400
+    duration = int(data.get("duration_seconds") or 300)
+    timer_type = data.get("type", "timer")
+    if timer_type not in ("timer", "stopwatch"):
+        timer_type = "timer"
+    sound_enabled = 1 if data.get("sound_enabled", True) else 0
+    sound_type = data.get("sound_type", "beep")
+    if sound_type not in ("beep", "jingle_bells", "christmas_bells", "ho_ho_ho", "sleigh_ride"):
+        sound_type = "beep"
+
+    c = conn(); cur = c.cursor()
+    cur.execute(
+        "INSERT INTO user_timers(user_id, label, duration_seconds, type, sound_enabled, sound_type) VALUES(?,?,?,?,?,?)",
+        (user["id"], label, duration, timer_type, sound_enabled, sound_type)
+    )
+    new_id = cur.lastrowid
+    c.commit(); c.close()
+    return jsonify(ok=True, id=new_id)
+
+
+@app.route("/api/timers/<int:timer_id>", methods=["PUT"])
+def api_timer_update(timer_id):
+    """Aktualisiert einen Timer des aktuellen Benutzers"""
+    user = current_user()
+    if not user:
+        return jsonify(ok=False, msg="Nicht angemeldet"), 401
+    data = request.get_json(silent=True) or {}
+
+    c = conn(); cur = c.cursor()
+    # Prüfen ob Timer dem Benutzer gehört
+    existing = cur.execute(
+        "SELECT id FROM user_timers WHERE id=? AND user_id=?", (timer_id, user["id"])
+    ).fetchone()
+    if not existing:
+        c.close()
+        return jsonify(ok=False, msg="Timer nicht gefunden"), 404
+
+    label = (data.get("label") or "").strip()
+    duration = int(data.get("duration_seconds") or 300)
+    timer_type = data.get("type", "timer")
+    if timer_type not in ("timer", "stopwatch"):
+        timer_type = "timer"
+    sound_enabled = 1 if data.get("sound_enabled", True) else 0
+    sound_type = data.get("sound_type", "beep")
+    if sound_type not in ("beep", "jingle_bells", "christmas_bells", "ho_ho_ho", "sleigh_ride"):
+        sound_type = "beep"
+
+    cur.execute(
+        "UPDATE user_timers SET label=?, duration_seconds=?, type=?, sound_enabled=?, sound_type=? WHERE id=?",
+        (label, duration, timer_type, sound_enabled, sound_type, timer_id)
+    )
+    c.commit(); c.close()
+    return jsonify(ok=True)
+
+
+@app.route("/api/timers/<int:timer_id>", methods=["DELETE"])
+def api_timer_delete(timer_id):
+    """Löscht einen Timer des aktuellen Benutzers"""
+    user = current_user()
+    if not user:
+        return jsonify(ok=False, msg="Nicht angemeldet"), 401
+
+    c = conn(); cur = c.cursor()
+    # Prüfen ob Timer dem Benutzer gehört
+    existing = cur.execute(
+        "SELECT id FROM user_timers WHERE id=? AND user_id=?", (timer_id, user["id"])
+    ).fetchone()
+    if not existing:
+        c.close()
+        return jsonify(ok=False, msg="Timer nicht gefunden"), 404
+
+    cur.execute("DELETE FROM user_timers WHERE id=?", (timer_id,))
+    c.commit(); c.close()
+    return jsonify(ok=True)
 
 
 @app.route("/api/admin/audit_log")

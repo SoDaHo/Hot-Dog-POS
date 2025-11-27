@@ -101,6 +101,66 @@
         #toast.warning { background:#f57c00 }
         #toast.info { background:#111 }
 
+        /* Timer Button */
+        .timer-btn { background:#2a2a2a; border:none; color:#fff; padding:6px 10px; border-radius:10px; cursor:pointer; font-size:18px; display:flex; align-items:center; gap:4px }
+        .timer-btn:hover { background:#444 }
+        .timer-btn .badge-count { background:#e53935; color:#fff; font-size:11px; padding:2px 6px; border-radius:999px; margin-left:2px }
+
+        /* Timer Modal */
+        .modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.5); z-index:900; display:none; align-items:center; justify-content:center }
+        .modal-overlay.show { display:flex }
+        .modal { background:#fff; border-radius:16px; padding:20px; max-width:500px; width:90%; max-height:80vh; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,.2) }
+        .modal h2 { margin:0 0 16px; font-size:20px; display:flex; align-items:center; justify-content:space-between }
+        .modal h2 button { background:none; border:none; font-size:24px; cursor:pointer; padding:0 }
+        .modal-section { margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid #eee }
+        .modal-section:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0 }
+        .modal-section h3 { margin:0 0 12px; font-size:14px; color:#666; text-transform:uppercase }
+        .timer-form { display:flex; flex-direction:column; gap:12px }
+        .timer-form label { font-size:14px; color:#333 }
+        .timer-form input, .timer-form select { padding:10px; border:1px solid #ddd; border-radius:8px; font-size:16px }
+        .timer-form .row { display:flex; gap:12px; align-items:center }
+        .timer-form .row > * { flex:1 }
+        .timer-form .duration-inputs { display:flex; gap:8px; align-items:center }
+        .timer-form .duration-inputs input { width:60px; text-align:center }
+        .timer-form .duration-inputs span { color:#666 }
+        .timer-presets { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px }
+        .timer-presets button { padding:8px 12px; border:1px solid #ddd; border-radius:8px; background:#f5f5f5; cursor:pointer; font-size:14px }
+        .timer-presets button:hover { background:#e0e0e0 }
+        .timer-form .checkbox-row { display:flex; align-items:center; gap:8px }
+        .timer-form .checkbox-row input[type=checkbox] { width:18px; height:18px }
+        .saved-timers { display:flex; flex-direction:column; gap:8px }
+        .saved-timer { display:flex; align-items:center; gap:12px; padding:12px; background:#f5f5f5; border-radius:10px }
+        .saved-timer .info { flex:1 }
+        .saved-timer .info .label { font-weight:600 }
+        .saved-timer .info .meta { font-size:12px; color:#666 }
+        .saved-timer button { padding:8px 12px; border:none; border-radius:8px; cursor:pointer; font-size:14px }
+        .saved-timer .start-btn { background:#111; color:#fff }
+        .saved-timer .delete-btn { background:#e53935; color:#fff }
+
+        /* Active Timers Display */
+        .active-timers { display:none; margin-top:12px }
+        .active-timers.has-timers { display:block }
+        .active-timers-grid { display:grid; gap:10px }
+        .active-timers-grid.cols-1 { grid-template-columns: 1fr }
+        .active-timers-grid.cols-2 { grid-template-columns: repeat(2, 1fr) }
+        .active-timers-grid.cols-3 { grid-template-columns: repeat(3, 1fr) }
+        @media (max-width: 600px) {
+            .active-timers-grid.cols-2, .active-timers-grid.cols-3 { grid-template-columns: 1fr }
+        }
+        .active-timer { background:#fff; border-radius:12px; padding:14px; box-shadow:0 2px 8px rgba(0,0,0,.08); display:flex; align-items:center; gap:12px }
+        .active-timer.running { border-left:4px solid #4caf50 }
+        .active-timer.paused { border-left:4px solid #ff9800 }
+        .active-timer.finished { border-left:4px solid #e53935; animation:pulse 1s infinite }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+        .active-timer .timer-info { flex:1; min-width:0 }
+        .active-timer .timer-label { font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+        .active-timer .timer-display { font-size:28px; font-weight:700; font-variant-numeric:tabular-nums }
+        .active-timer .timer-controls { display:flex; gap:6px }
+        .active-timer .timer-controls button { width:36px; height:36px; border:none; border-radius:8px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center }
+        .active-timer .play-pause { background:#111; color:#fff }
+        .active-timer .reset-btn { background:#f5f5f5 }
+        .active-timer .stop-btn { background:#e53935; color:#fff }
+
         /* Mobile kompakt */
         @media (max-width: 600px){
             .grid{ grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important; }
@@ -134,6 +194,10 @@
         <option value="tablet">3 pro Zeile (Tablet)</option>
     </select>
     <div class="right">
+        <button class="timer-btn" onclick="openTimerModal()" title="Timer">
+            <span>&#9201;</span>
+            <span class="badge-count" id="timerBadge" style="display:none">0</span>
+        </button>
         <div>eingeloggt: <strong>{{ user.username }}</strong></div>
         {% if user.is_admin %}<a href="/admin">Admin</a>{% endif %}
         <a href="/logout">Logout</a>
@@ -163,9 +227,86 @@
             <button id="pay" class="btn" style="font-size:20px;width:100%">Kassieren</button>
         </div>
     </div>
+
+    <!-- Aktive Timer Anzeige -->
+    <div class="active-timers" id="activeTimers">
+        <div class="active-timers-grid" id="activeTimersGrid"></div>
+    </div>
 </div>
 
 <div id="toast"></div>
+
+<!-- Timer Modal -->
+<div class="modal-overlay" id="timerModal" onclick="if(event.target===this)closeTimerModal()">
+    <div class="modal">
+        <h2>
+            <span>Timer & Stoppuhren</span>
+            <button onclick="closeTimerModal()">&times;</button>
+        </h2>
+
+        <!-- Neuen Timer erstellen -->
+        <div class="modal-section">
+            <h3>Neuen Timer erstellen</h3>
+            <div class="timer-form">
+                <div class="row">
+                    <div>
+                        <label>Name</label>
+                        <input type="text" id="newTimerLabel" placeholder="z.B. Pommes">
+                    </div>
+                    <div>
+                        <label>Typ</label>
+                        <select id="newTimerType" onchange="toggleDurationInputs()">
+                            <option value="timer">Timer (Countdown)</option>
+                            <option value="stopwatch">Stoppuhr</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="durationRow">
+                    <label>Dauer</label>
+                    <div class="duration-inputs">
+                        <input type="number" id="newTimerMin" value="5" min="0" max="99">
+                        <span>Min</span>
+                        <input type="number" id="newTimerSec" value="0" min="0" max="59">
+                        <span>Sek</span>
+                    </div>
+                    <div class="timer-presets">
+                        <button type="button" onclick="setDuration(3,0)">3 Min</button>
+                        <button type="button" onclick="setDuration(5,0)">5 Min</button>
+                        <button type="button" onclick="setDuration(8,0)">8 Min</button>
+                        <button type="button" onclick="setDuration(10,0)">10 Min</button>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="newTimerSound" checked onchange="toggleSoundSelect()">
+                        <label for="newTimerSound">Sound bei Ablauf</label>
+                    </div>
+                    <div id="soundSelectRow">
+                        <label>Sound</label>
+                        <select id="newTimerSoundType">
+                            <option value="beep">Beep</option>
+                            <option value="jingle_bells">Jingle Bells</option>
+                            <option value="christmas_bells">Weihnachtsglocken</option>
+                            <option value="ho_ho_ho">Ho Ho Ho</option>
+                            <option value="sleigh_ride">Sleigh Ride</option>
+                        </select>
+                        <button type="button" class="btn" style="padding:6px 10px;font-size:12px;background:#666;margin-left:4px" onclick="previewSound()">Test</button>
+                    </div>
+                </div>
+                <div class="row">
+                    <button class="btn" onclick="createAndStartTimer()">Erstellen & Starten</button>
+                    <button class="btn" style="background:#666" onclick="saveTimerPreset()">Nur Speichern</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gespeicherte Timer -->
+        <div class="modal-section" id="savedTimersSection" style="display:none">
+            <h3>Gespeicherte Timer</h3>
+            <div class="saved-timers" id="savedTimersList"></div>
+        </div>
+    </div>
+</div>
 
 <script>
     // PWA rückgängig machen: vorhandene Service Worker entfernen & Cache leeren
@@ -394,6 +535,544 @@
     renderItems();
     renderPM();
     updateSum();
+
+    // ========== TIMER SYSTEM ==========
+    let savedTimers = [];  // Aus DB geladen
+    let activeTimers = []; // Laufende Timer (nur im Browser)
+    let timerInterval = null;
+
+    // Audio Context für Sound
+    let audioCtx = null;
+    function getAudioCtx() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        return audioCtx;
+    }
+
+    // Sound-Generatoren
+    const SOUNDS = {
+        beep: function() {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = 880; osc.type = 'square'; gain.gain.value = 0.3;
+            osc.start(); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+            osc.stop(ctx.currentTime + 0.5);
+            setTimeout(() => {
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                osc2.connect(gain2); gain2.connect(ctx.destination);
+                osc2.frequency.value = 1100; osc2.type = 'square'; gain2.gain.value = 0.3;
+                osc2.start(); gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+                osc2.stop(ctx.currentTime + 0.5);
+            }, 200);
+        },
+
+        jingle_bells: function() {
+            const ctx = getAudioCtx();
+            // E E E, E E E, E G C D E (Jingle Bells Melodie)
+            const notes = [659, 659, 659, 0, 659, 659, 659, 0, 659, 784, 523, 587, 659];
+            const durations = [150, 150, 300, 100, 150, 150, 300, 100, 150, 150, 150, 150, 400];
+            let time = ctx.currentTime;
+            notes.forEach((freq, i) => {
+                if (freq > 0) {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
+                    osc.frequency.value = freq; osc.type = 'sine';
+                    gain.gain.setValueAtTime(0.25, time);
+                    gain.gain.exponentialRampToValueAtTime(0.01, time + durations[i]/1000 - 0.02);
+                    osc.start(time); osc.stop(time + durations[i]/1000);
+                }
+                time += durations[i]/1000;
+            });
+        },
+
+        christmas_bells: function() {
+            const ctx = getAudioCtx();
+            // Glockenklang mit Obertönen
+            for (let i = 0; i < 4; i++) {
+                setTimeout(() => {
+                    const fundamental = 600 + Math.random() * 200;
+                    [1, 2, 2.4, 3].forEach((mult, j) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.connect(gain); gain.connect(ctx.destination);
+                        osc.frequency.value = fundamental * mult;
+                        osc.type = 'sine';
+                        gain.gain.setValueAtTime(0.15 / (j + 1), ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5);
+                        osc.start(); osc.stop(ctx.currentTime + 1.5);
+                    });
+                }, i * 400);
+            }
+        },
+
+        ho_ho_ho: function() {
+            const ctx = getAudioCtx();
+            // Tiefe Töne wie ein Lachen
+            [130, 110, 90].forEach((freq, i) => {
+                setTimeout(() => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
+                    osc.frequency.value = freq;
+                    osc.type = 'sawtooth';
+                    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+                    osc.start(); osc.stop(ctx.currentTime + 0.4);
+                    // Vibrato
+                    const lfo = ctx.createOscillator();
+                    const lfoGain = ctx.createGain();
+                    lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+                    lfo.frequency.value = 6; lfoGain.gain.value = 10;
+                    lfo.start(); lfo.stop(ctx.currentTime + 0.4);
+                }, i * 350);
+            });
+        },
+
+        sleigh_ride: function() {
+            const ctx = getAudioCtx();
+            // Schnelle fröhliche Glöckchen
+            const notes = [784, 880, 784, 659, 784, 880, 784, 988, 880, 784, 659, 587];
+            let time = ctx.currentTime;
+            notes.forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.frequency.value = freq; osc.type = 'triangle';
+                gain.gain.setValueAtTime(0.2, time);
+                gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+                osc.start(time); osc.stop(time + 0.12);
+                time += 0.1;
+            });
+        }
+    };
+
+    function playAlarm(soundType = 'beep') {
+        const fn = SOUNDS[soundType] || SOUNDS.beep;
+        fn();
+    }
+
+    function previewSound() {
+        const soundType = document.getElementById('newTimerSoundType').value;
+        playAlarm(soundType);
+    }
+
+    function toggleSoundSelect() {
+        const enabled = document.getElementById('newTimerSound').checked;
+        document.getElementById('soundSelectRow').style.opacity = enabled ? '1' : '0.4';
+    }
+
+    // Modal öffnen/schließen
+    function openTimerModal() {
+        document.getElementById('timerModal').classList.add('show');
+        loadSavedTimers();
+    }
+    function closeTimerModal() {
+        document.getElementById('timerModal').classList.remove('show');
+    }
+
+    // Dauer-Inputs umschalten (bei Stoppuhr ausblenden)
+    function toggleDurationInputs() {
+        const type = document.getElementById('newTimerType').value;
+        document.getElementById('durationRow').style.display = type === 'stopwatch' ? 'none' : 'block';
+    }
+
+    // Preset-Buttons
+    function setDuration(min, sec) {
+        document.getElementById('newTimerMin').value = min;
+        document.getElementById('newTimerSec').value = sec;
+    }
+
+    // Gespeicherte Timer laden
+    async function loadSavedTimers() {
+        try {
+            const res = await fetch('/api/timers');
+            const data = await res.json();
+            if (data.ok) {
+                savedTimers = data.timers;
+                renderSavedTimers();
+            }
+        } catch(e) {
+            console.error('Timer laden fehlgeschlagen:', e);
+        }
+    }
+
+    // Gespeicherte Timer anzeigen
+    function renderSavedTimers() {
+        const section = document.getElementById('savedTimersSection');
+        const list = document.getElementById('savedTimersList');
+        if (!savedTimers.length) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = 'block';
+        const soundNames = {beep:'Beep', jingle_bells:'Jingle Bells', christmas_bells:'Glocken', ho_ho_ho:'Ho Ho Ho', sleigh_ride:'Sleigh Ride'};
+        list.innerHTML = savedTimers.map(t => {
+            const durStr = t.type === 'stopwatch' ? 'Stoppuhr' : formatTime(t.duration_seconds);
+            const soundInfo = t.sound_enabled ? (soundNames[t.sound_type] || 'Beep') : '🔕';
+            return `<div class="saved-timer">
+                <div class="info">
+                    <div class="label">${escHtml(t.label)}</div>
+                    <div class="meta">${durStr} · ${soundInfo}</div>
+                </div>
+                <button class="start-btn" onclick="startSavedTimer(${t.id})">▶ Start</button>
+                <button class="delete-btn" onclick="deleteTimer(${t.id})">🗑</button>
+            </div>`;
+        }).join('');
+    }
+
+    // Timer erstellen und starten
+    async function createAndStartTimer() {
+        const label = document.getElementById('newTimerLabel').value.trim();
+        const type = document.getElementById('newTimerType').value;
+        const min = parseInt(document.getElementById('newTimerMin').value) || 0;
+        const sec = parseInt(document.getElementById('newTimerSec').value) || 0;
+        const soundEnabled = document.getElementById('newTimerSound').checked;
+        const soundType = document.getElementById('newTimerSoundType').value;
+
+        if (!label) {
+            notify('Bitte Namen eingeben', 'warning');
+            return;
+        }
+
+        const durationSeconds = type === 'stopwatch' ? 0 : (min * 60 + sec);
+        if (type === 'timer' && durationSeconds <= 0) {
+            notify('Bitte Dauer eingeben', 'warning');
+            return;
+        }
+
+        // Auch in DB speichern (falls noch nicht vorhanden mit gleichem Namen)
+        const existing = savedTimers.find(t => t.label === label);
+        if (!existing) {
+            try {
+                await fetch('/api/timers', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        label,
+                        type,
+                        duration_seconds: durationSeconds,
+                        sound_enabled: soundEnabled,
+                        sound_type: soundType
+                    })
+                });
+            } catch(e) { /* ignore */ }
+        }
+
+        startNewTimer(label, type, durationSeconds, soundEnabled, soundType);
+        closeTimerModal();
+        resetTimerForm();
+    }
+
+    // Timer als Preset speichern
+    async function saveTimerPreset() {
+        const label = document.getElementById('newTimerLabel').value.trim();
+        const type = document.getElementById('newTimerType').value;
+        const min = parseInt(document.getElementById('newTimerMin').value) || 0;
+        const sec = parseInt(document.getElementById('newTimerSec').value) || 0;
+        const soundEnabled = document.getElementById('newTimerSound').checked;
+        const soundType = document.getElementById('newTimerSoundType').value;
+
+        if (!label) {
+            notify('Bitte Namen eingeben', 'warning');
+            return;
+        }
+
+        const durationSeconds = type === 'stopwatch' ? 0 : (min * 60 + sec);
+
+        try {
+            const res = await fetch('/api/timers', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    label,
+                    type,
+                    duration_seconds: durationSeconds,
+                    sound_enabled: soundEnabled,
+                    sound_type: soundType
+                })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                notify('Timer gespeichert', 'success');
+                loadSavedTimers();
+                resetTimerForm();
+            } else {
+                notify(data.msg || 'Fehler', 'error');
+            }
+        } catch(e) {
+            notify('Verbindungsfehler', 'error');
+        }
+    }
+
+    // Gespeicherten Timer starten
+    function startSavedTimer(id) {
+        const t = savedTimers.find(x => x.id === id);
+        if (!t) return;
+        startNewTimer(t.label, t.type, t.duration_seconds, t.sound_enabled, t.sound_type || 'beep');
+        closeTimerModal();
+    }
+
+    // Timer löschen
+    async function deleteTimer(id) {
+        if (!confirm('Timer wirklich löschen?')) return;
+        try {
+            const res = await fetch(`/api/timers/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.ok) {
+                notify('Timer gelöscht', 'success');
+                loadSavedTimers();
+            }
+        } catch(e) {
+            notify('Fehler beim Löschen', 'error');
+        }
+    }
+
+    // Neuen aktiven Timer starten
+    function startNewTimer(label, type, durationSeconds, soundEnabled, soundType = 'beep') {
+        const timer = {
+            uid: Date.now() + Math.random(),
+            label,
+            type,
+            durationSeconds,
+            soundEnabled,
+            soundType,
+            currentSeconds: type === 'stopwatch' ? 0 : durationSeconds,
+            running: true,
+            finished: false,
+            startedAt: Date.now()  // Für Persistenz
+        };
+        activeTimers.push(timer);
+        renderActiveTimers();
+        startTimerInterval();
+        updateTimerBadge();
+        saveActiveTimersToStorage();
+    }
+
+    // Timer-Interval starten
+    function startTimerInterval() {
+        if (timerInterval) return;
+        timerInterval = setInterval(() => {
+            let needsRender = false;
+            let needsSave = false;
+            activeTimers.forEach(t => {
+                if (!t.running || t.finished) return;
+                if (t.type === 'stopwatch') {
+                    t.currentSeconds++;
+                    needsRender = true;
+                    needsSave = true;
+                } else {
+                    t.currentSeconds--;
+                    needsRender = true;
+                    needsSave = true;
+                    if (t.currentSeconds <= 0) {
+                        t.currentSeconds = 0;
+                        t.finished = true;
+                        t.running = false;
+                        if (t.soundEnabled) playAlarm(t.soundType || 'beep');
+                        notify(`Timer "${t.label}" abgelaufen!`, 'warning');
+                    }
+                }
+            });
+            if (needsRender) renderActiveTimers();
+            if (needsSave) saveActiveTimersToStorage();
+        }, 1000);
+    }
+
+    // Timer stoppen/interval beenden wenn keine aktiven
+    function checkTimerInterval() {
+        if (!activeTimers.length && timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+    }
+
+    // Aktive Timer rendern
+    function renderActiveTimers() {
+        const container = document.getElementById('activeTimers');
+        const grid = document.getElementById('activeTimersGrid');
+
+        if (!activeTimers.length) {
+            container.classList.remove('has-timers');
+            grid.innerHTML = '';
+            return;
+        }
+
+        container.classList.add('has-timers');
+
+        // Grid-Spalten basierend auf Anzahl
+        const count = activeTimers.length;
+        grid.className = 'active-timers-grid';
+        if (count === 1) grid.classList.add('cols-1');
+        else if (count === 2) grid.classList.add('cols-2');
+        else grid.classList.add('cols-3');
+
+        grid.innerHTML = activeTimers.map(t => {
+            const state = t.finished ? 'finished' : (t.running ? 'running' : 'paused');
+            const playIcon = t.running ? '⏸' : '▶';
+            return `<div class="active-timer ${state}">
+                <div class="timer-info" onclick="toggleTimer('${t.uid}')">
+                    <div class="timer-label">${escHtml(t.label)}</div>
+                    <div class="timer-display">${formatTime(t.currentSeconds)}</div>
+                </div>
+                <div class="timer-controls">
+                    <button class="play-pause" onclick="toggleTimer('${t.uid}')">${playIcon}</button>
+                    <button class="reset-btn" onclick="resetTimer('${t.uid}')">↺</button>
+                    <button class="stop-btn" onclick="removeTimer('${t.uid}')">✕</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // Timer pausieren/fortsetzen
+    function toggleTimer(uid) {
+        const t = activeTimers.find(x => x.uid == uid);
+        if (!t) return;
+        if (t.finished) {
+            // Reset wenn fertig
+            t.currentSeconds = t.type === 'stopwatch' ? 0 : t.durationSeconds;
+            t.finished = false;
+            t.startedAt = Date.now();
+        }
+        t.running = !t.running;
+        if (t.running) {
+            t.resumedAt = Date.now();
+        } else {
+            t.pausedAt = Date.now();
+        }
+        renderActiveTimers();
+        saveActiveTimersToStorage();
+        if (t.running) startTimerInterval();
+    }
+
+    // Timer zurücksetzen
+    function resetTimer(uid) {
+        const t = activeTimers.find(x => x.uid == uid);
+        if (!t) return;
+        t.currentSeconds = t.type === 'stopwatch' ? 0 : t.durationSeconds;
+        t.finished = false;
+        t.running = false;
+        t.startedAt = Date.now();
+        renderActiveTimers();
+        saveActiveTimersToStorage();
+    }
+
+    // Timer entfernen
+    function removeTimer(uid) {
+        activeTimers = activeTimers.filter(x => x.uid != uid);
+        renderActiveTimers();
+        updateTimerBadge();
+        checkTimerInterval();
+        saveActiveTimersToStorage();
+    }
+
+    // Badge aktualisieren
+    function updateTimerBadge() {
+        const badge = document.getElementById('timerBadge');
+        if (activeTimers.length > 0) {
+            badge.style.display = 'inline';
+            badge.textContent = activeTimers.length;
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+
+    // Formular zurücksetzen
+    function resetTimerForm() {
+        document.getElementById('newTimerLabel').value = '';
+        document.getElementById('newTimerType').value = 'timer';
+        document.getElementById('newTimerMin').value = '5';
+        document.getElementById('newTimerSec').value = '0';
+        document.getElementById('newTimerSound').checked = true;
+        document.getElementById('newTimerSoundType').value = 'beep';
+        toggleDurationInputs();
+        toggleSoundSelect();
+    }
+
+    // Hilfsfunktionen
+    function formatTime(secs) {
+        const m = Math.floor(secs / 60);
+        const s = secs % 60;
+        return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+    function escHtml(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // LocalStorage Persistenz
+    const TIMER_STORAGE_KEY = 'pos_active_timers';
+
+    function saveActiveTimersToStorage() {
+        try {
+            const data = activeTimers.map(t => ({
+                uid: t.uid,
+                label: t.label,
+                type: t.type,
+                durationSeconds: t.durationSeconds,
+                soundEnabled: t.soundEnabled,
+                soundType: t.soundType,
+                currentSeconds: t.currentSeconds,
+                running: t.running,
+                finished: t.finished,
+                savedAt: Date.now()
+            }));
+            localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(data));
+        } catch(e) { /* ignore */ }
+    }
+
+    function loadActiveTimersFromStorage() {
+        try {
+            const raw = localStorage.getItem(TIMER_STORAGE_KEY);
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            if (!Array.isArray(data) || !data.length) return;
+
+            const now = Date.now();
+            data.forEach(t => {
+                // Berechne verstrichene Zeit seit Speicherung
+                const elapsed = Math.floor((now - t.savedAt) / 1000);
+
+                if (t.running && !t.finished) {
+                    if (t.type === 'stopwatch') {
+                        t.currentSeconds += elapsed;
+                    } else {
+                        t.currentSeconds -= elapsed;
+                        if (t.currentSeconds <= 0) {
+                            t.currentSeconds = 0;
+                            t.finished = true;
+                            t.running = false;
+                        }
+                    }
+                }
+
+                activeTimers.push({
+                    uid: t.uid,
+                    label: t.label,
+                    type: t.type,
+                    durationSeconds: t.durationSeconds,
+                    soundEnabled: t.soundEnabled,
+                    soundType: t.soundType || 'beep',
+                    currentSeconds: t.currentSeconds,
+                    running: t.running,
+                    finished: t.finished
+                });
+            });
+
+            renderActiveTimers();
+            updateTimerBadge();
+            if (activeTimers.some(t => t.running)) {
+                startTimerInterval();
+            }
+        } catch(e) {
+            console.error('Timer aus Storage laden fehlgeschlagen:', e);
+        }
+    }
+
+    // Initialisierung
+    loadSavedTimers();
+    loadActiveTimersFromStorage();
 </script>
 </body>
 </html>
