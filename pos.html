@@ -155,8 +155,8 @@
         .active-timer .timer-info { flex:1; min-width:0 }
         .active-timer .timer-label { font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
         .active-timer .timer-display { font-size:28px; font-weight:700; font-variant-numeric:tabular-nums }
-        .active-timer .timer-controls { display:flex; gap:6px }
-        .active-timer .timer-controls button { width:36px; height:36px; border:none; border-radius:8px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center }
+        .active-timer .timer-controls { display:flex; gap:8px }
+        .active-timer .timer-controls button { width:44px; height:44px; border:none; border-radius:10px; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; -webkit-tap-highlight-color:transparent; touch-action:manipulation }
         .active-timer .play-pause { background:#111; color:#fff }
         .active-timer .reset-btn { background:#f5f5f5 }
         .active-timer .stop-btn { background:#e53935; color:#fff }
@@ -541,12 +541,41 @@
     let activeTimers = []; // Laufende Timer (nur im Browser)
     let timerInterval = null;
 
-    // Audio Context für Sound
+    // Audio Context für Sound (iOS PWA benötigt User-Interaktion)
     let audioCtx = null;
     function getAudioCtx() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        // iOS: AudioContext muss nach User-Interaktion "resumed" werden
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
         return audioCtx;
     }
+
+    // iOS PWA: AudioContext bei erstem Touch initialisieren
+    function initAudioOnTouch() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        // Stiller "Ping" um Audio zu aktivieren
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        gain.gain.value = 0.001; // unhörbar
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.01);
+        // Event-Listener entfernen
+        document.removeEventListener('touchstart', initAudioOnTouch);
+        document.removeEventListener('click', initAudioOnTouch);
+    }
+    document.addEventListener('touchstart', initAudioOnTouch, { once: true });
+    document.addEventListener('click', initAudioOnTouch, { once: true });
 
     // Sound-Generatoren
     const SOUNDS = {
